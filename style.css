@@ -1,0 +1,8 @@
+html, body {
+    height: 100%;
+  }
+  
+  #viewer canvas {
+    display: block;   /* remove default inline‑block gap */
+  }
+  

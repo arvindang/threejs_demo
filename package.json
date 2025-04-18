@@ -1,0 +1,14 @@
+{
+  "name": "threejs-prototype",
+  "version": "1.0.0",
+  "description": "3D object manipulation prototype",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "three": "^0.164.0",
+    "lil-gui": "^0.19.2"
+  }
+} 
