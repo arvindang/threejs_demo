@@ -23,30 +23,6 @@
       }
     }
   </script>
-  
-  <style>
-    .control-group {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    
-    .slider-container {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    
-    .slider-container input {
-      flex: 1;
-    }
-    
-    .slider-label {
-      min-width: 60px;
-      margin-bottom: 0;
-    }
-  </style>
 </head>
 <body class="bg-light">
 
@@ -64,22 +40,33 @@
   <div class="container pb-5">
     <div class="card shadow-sm">
       <div class="card-header d-flex align-items-center gap-3">
-        <div class="control-group">
+        <div class="d-flex flex-wrap align-items-center gap-3 w-100">
           <!-- Reset button -->
           <button id="btnReset" class="btn btn-sm btn-outline-secondary">
             Reset
           </button>
 
           <!-- Explode slider -->
-          <div class="slider-container">
-            <label for="explode" class="slider-label">Explode</label>
-            <input id="explode" type="range" min="0" max="1" step="0.01" value="0" class="form-range" />
+          <div class="d-flex align-items-center gap-2 flex-grow-1">
+            <label for="explode" class="mb-0 me-2">Explode</label>
+            <input id="explode" type="range" min="0" max="1" step="0.01" value="0" class="form-range flex-grow-1" />
           </div>
 
           <!-- Slice slider -->
-          <div class="slider-container">
-            <label for="slice" class="slider-label">Slice</label>
-            <input id="slice" type="range" min="-1" max="1" step="0.01" value="1" class="form-range" />
+          <div class="d-flex align-items-center gap-2 flex-grow-1">
+            <label for="slice" class="mb-0 me-2">Slice</label>
+            <input id="slice" type="range" min="-1" max="1" step="0.01" value="1" class="form-range flex-grow-1" />
+          </div>
+
+          <!-- Animation controls -->
+          <div class="d-flex align-items-center gap-2 flex-grow-1">
+            <label for="animate" class="mb-0 me-2">Animate</label>
+            <select id="animate" class="form-select form-select-sm" style="width: 120px;">
+              <option value="none">None</option>
+              <option value="rotate">Rotate</option>
+              <option value="drive">Drive</option>
+            </select>
+            <input id="animSpeed" type="range" min="0.1" max="2" step="0.1" value="1" class="form-range flex-grow-1 ms-2" />
           </div>
         </div>
       </div>
