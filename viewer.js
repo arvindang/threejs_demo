@@ -3,6 +3,16 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { GUI } from 'https://cdn.jsdelivr.net/npm/lil-gui@0.19.2/+esm';
 
+/* ---------- Recording State ---------- */
+let mediaRecorder;
+let audioChunks = [];
+let recordedEvents = [];
+let recordingStartTime;
+let stateCaptureInterval;
+let playbackLoop;
+let currentAudio = null;
+let recordingState = 'idle'; // idle, recording, stopped, playing, paused
+
 /* ---------- scene setup ---------- */
 const container = document.getElementById('viewer');
 const scene = new THREE.Scene();
@@ -63,6 +73,7 @@ const params = {
     clipPlane.constant = 1;
     explode(0);
     controls.reset();
+    resetRecording();
     gui.refresh();
   }
 };
@@ -234,3 +245,254 @@ renderer.setAnimationLoop(() => {
   controls.update();
   renderer.render(scene, camera);
 });
+
+/* ---------- Recording/Playback Logic ---------- */
+
+function updateButtonStates() {
+  btnRecord.disabled = recordingState === 'recording' || recordingState === 'playing';
+  btnStop.disabled = recordingState !== 'recording';
+  btnPlay.disabled = recordingState === 'recording' || recordingState === 'playing' || audioChunks.length === 0;
+  btnPause.disabled = recordingState !== 'playing';
+  // Disable sliders during playback/recording?
+  // explodeSlider.disabled = recordingState === 'recording' || recordingState === 'playing';
+  // sliceSlider.disabled = recordingState === 'recording' || recordingState === 'playing';
+}
+
+async function startRecording() {
+  if (recordingState !== 'idle' && recordingState !== 'stopped') return;
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+
+    audioChunks = [];
+    recordedEvents = [];
+    recordingState = 'recording';
+    recordingStartTime = performance.now();
+    console.log(`State set to: ${recordingState}. Preparing to update buttons.`);
+    console.log(`Before update - btnStop.disabled should become: ${recordingState !== 'recording'}`);
+    updateButtonStates();
+    console.log(`After update - btnStop.disabled is: ${btnStop.disabled}`);
+    console.log('Recording started...');
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunks.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = () => {
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      console.log('Inside onstop. typeof window.URL:', typeof window.URL);
+      console.log('Inside onstop. typeof window.URL.createObjectURL:', typeof window.URL?.createObjectURL); 
+      // Explicitly use window.URL
+      try {
+        currentAudio = new Audio(window.URL.createObjectURL(audioBlob));
+        recordingState = 'stopped';
+        updateButtonStates();
+        // Clean up the media stream tracks
+        stream.getTracks().forEach(track => track.stop());
+        console.log('Recording stopped. Audio ready.');
+        clearInterval(stateCaptureInterval); // Stop capturing state
+        updateProgressBar(0); // Reset progress bar
+        updateTimeDisplay(0); // Reset time display
+      } catch (error) {
+          console.error('Error creating object URL or processing stop:', error);
+          // Attempt to reset state even if audio creation failed
+          recordingState = 'idle'; 
+          updateButtonStates();
+          stream.getTracks().forEach(track => track.stop());
+          clearInterval(stateCaptureInterval);
+      }
+    };
+
+    mediaRecorder.start();
+
+    // Start capturing state periodically (e.g., 10 times per second)
+    stateCaptureInterval = setInterval(captureState, 100); 
+
+  } catch (err) {
+    console.error('Error accessing microphone:', err);
+    alert('Could not access microphone. Please ensure permission is granted.');
+    recordingState = 'idle'; // Reset state on error
+    updateButtonStates();
+  }
+}
+
+function stopRecording() {
+  if (recordingState !== 'recording') return;
+  mediaRecorder.stop(); // This will trigger the onstop event
+}
+
+function captureState() {
+  const timestamp = performance.now() - recordingStartTime;
+  const state = {
+    timestamp,
+    cameraPosition: camera.position.clone(),
+    controlsTarget: controls.target.clone(),
+    explodeValue: params.explode,
+    sliceValue: params.slice
+  };
+  recordedEvents.push(state);
+}
+
+function updateProgressBar(percentage) {
+  progressBar.style.width = `${percentage}%`;
+  progressBar.setAttribute('aria-valuenow', percentage);
+}
+
+function formatTime(seconds) {
+  const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+  return `${mins}:${secs}`;
+}
+
+function updateTimeDisplay(currentTime, duration = null) {
+  const timeStr = formatTime(currentTime);
+  const durationStr = duration ? ` / ${formatTime(duration)}` : '';
+  timeDisplay.textContent = timeStr + durationStr;
+}
+
+/* ---------- Playback / Pause / Reset ---------- */
+
+function playRecording() {
+  if (!currentAudio || (recordingState !== 'stopped' && recordingState !== 'paused')) return;
+
+  const wasPaused = (recordingState === 'paused');
+  recordingState = 'playing';
+  updateButtonStates();
+  console.log(wasPaused ? 'Resuming playback...' : 'Starting playback...');
+  
+  currentAudio.play();
+
+  // Ensure duration is available before starting the loop
+  if (currentAudio.duration && currentAudio.duration > 0) {
+    updateTimeDisplay(currentAudio.currentTime, currentAudio.duration);
+    playbackLoop = requestAnimationFrame(runPlaybackLoop);
+  } else {
+    // Wait for metadata if duration isn't ready
+    currentAudio.onloadedmetadata = () => {
+      console.log('Audio metadata loaded, duration:', currentAudio.duration);
+      updateTimeDisplay(currentAudio.currentTime, currentAudio.duration);
+      playbackLoop = requestAnimationFrame(runPlaybackLoop);
+    };
+  }
+  
+  // Handle end of playback
+  currentAudio.onended = () => {
+      console.log('Playback finished.');
+      recordingState = 'stopped';
+      updateButtonStates();
+      updateProgressBar(0);
+      updateTimeDisplay(0, currentAudio.duration); // Show 0 / total duration
+      cancelAnimationFrame(playbackLoop);
+  };
+}
+
+function pauseRecording() {
+  if (recordingState !== 'playing' || !currentAudio) return;
+
+  currentAudio.pause();
+  recordingState = 'paused';
+  cancelAnimationFrame(playbackLoop);
+  updateButtonStates();
+  console.log('Playback paused.');
+}
+
+let lastAppliedEventIndex = -1; // Keep track of the last applied event
+
+function runPlaybackLoop() {
+  if (recordingState !== 'playing' || !currentAudio || !currentAudio.duration) {
+    return; // Stop loop if not playing or audio not ready
+  }
+
+  const currentTimeMs = currentAudio.currentTime * 1000;
+  
+  // Find the latest event that should have occurred by currentTimeMs
+  let eventToApply = null;
+  for (let i = lastAppliedEventIndex + 1; i < recordedEvents.length; i++) {
+    if (recordedEvents[i].timestamp <= currentTimeMs) {
+        eventToApply = recordedEvents[i];
+        lastAppliedEventIndex = i;
+    } else {
+        // Events are ordered by timestamp, so we can stop searching
+        break; 
+    }
+  }
+
+  // Apply the state if a new event was found
+  if (eventToApply) {
+    // Apply camera state smoothly?
+    // camera.position.lerp(eventToApply.cameraPosition, 0.5); // Example: lerp
+    // controls.target.lerp(eventToApply.controlsTarget, 0.5);
+    camera.position.copy(eventToApply.cameraPosition);
+    controls.target.copy(eventToApply.controlsTarget);
+    
+    // Apply slider states
+    if (params.explode !== eventToApply.explodeValue) {
+        params.explode = eventToApply.explodeValue;
+        explode(params.explode);
+    }
+    if (params.slice !== eventToApply.sliceValue) {
+        params.slice = eventToApply.sliceValue;
+        clipPlane.constant = params.slice;
+    }
+
+    // Update GUI to reflect changes (might be slow if done every frame)
+    // gui.refresh(); 
+    // A more efficient way might be needed for complex GUIs
+    // For now, let's update the specific controller values if possible
+    gui.__controllers.forEach(c => {
+        if (c.property === 'explode' || c.property === 'slice') {
+            c.updateDisplay();
+        }
+    });
+
+  }
+
+  // Update progress bar and time display
+  const progressPercent = (currentAudio.currentTime / currentAudio.duration) * 100;
+  updateProgressBar(progressPercent);
+  updateTimeDisplay(currentAudio.currentTime, currentAudio.duration);
+
+  // Continue the loop
+  playbackLoop = requestAnimationFrame(runPlaybackLoop);
+}
+
+function resetRecording() {
+  // Stop any ongoing recording or playback
+  if (recordingState === 'recording') {
+    stopRecording();
+  }
+  if (recordingState === 'playing' || recordingState === 'paused') {
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.onended = null; // Remove listener
+      currentAudio.onloadedmetadata = null; // Remove listener
+      URL.revokeObjectURL(currentAudio.src); // Clean up blob URL
+    }
+    cancelAnimationFrame(playbackLoop);
+  }
+
+  // Reset state variables
+  audioChunks = [];
+  recordedEvents = [];
+  currentAudio = null;
+  mediaRecorder = null;
+  recordingState = 'idle';
+  lastAppliedEventIndex = -1;
+  updateButtonStates();
+  updateProgressBar(0);
+  updateTimeDisplay(0);
+  console.log('Recording state reset.');
+}
+
+// Add event listeners
+btnRecord.addEventListener('click', startRecording);
+btnStop.addEventListener('click', stopRecording);
+btnPlay.addEventListener('click', playRecording);
+btnPause.addEventListener('click', pauseRecording);
+document.getElementById('btnReset').addEventListener('click', resetRecording); // Add explicit reset for recording
+
+// Initial button state update
+updateButtonStates();
