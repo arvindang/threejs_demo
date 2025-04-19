@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { GUI } from 'https://cdn.jsdelivr.net/npm/lil-gui@0.19.2/+esm';
+import { gsap } from "https://cdn.jsdelivr.net/npm/gsap@3.12.5/+esm"; // Added for animation
 
 /* ---------- Recording State ---------- */
 let mediaRecorder;
@@ -12,6 +13,10 @@ let stateCaptureInterval;
 let playbackLoop;
 let currentAudio = null;
 let recordingState = 'idle'; // idle, recording, stopped, playing, paused
+
+/* ---------- Focus State ---------- */
+let currentlyFocusedPart = null;
+let previousCameraState = { position: null, target: null }; // To store state before focusing
 
 /* ---------- scene setup ---------- */
 const container = document.getElementById('viewer');
@@ -57,6 +62,10 @@ scene.add(axesHelper);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
+/* ---------- Raycasting Setup ---------- */
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
 /* clipping plane (Y‑axis slice) */
 const clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 1);
 renderer.clippingPlanes = [clipPlane];
@@ -72,6 +81,7 @@ const params = {
     params.slice = 1;
     clipPlane.constant = 1;
     explode(0);
+    goBackToFullView(false); // Ensure we are not in focused view, don't animate
     controls.reset();
     resetRecording();
     gui.refresh();
@@ -226,7 +236,13 @@ const envMapTexture = new THREE.TextureLoader().load(
 function explode(factor) {
   for (const mesh of parts) {
     const dir = mesh.userData.origin.clone().normalize(); // radial
-    mesh.position.lerpVectors(mesh.userData.origin, mesh.userData.origin.clone().add(dir), factor);
+    // Ensure explode doesn't interfere with focus position
+    if (!currentlyFocusedPart || mesh === currentlyFocusedPart) {
+        mesh.position.lerpVectors(mesh.userData.origin, mesh.userData.origin.clone().add(dir), factor);
+    } else if (currentlyFocusedPart) {
+        // If focused on another part, keep this one at its origin
+        mesh.position.copy(mesh.userData.origin);
+    }
   }
 }
 
@@ -246,6 +262,146 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
 });
 
+/* ---------- Part Selection/Focus Logic ---------- */
+
+const btnBack = document.getElementById('btnBack');
+
+function setFocusState(targetPart) {
+  currentlyFocusedPart = targetPart;
+  parts.forEach(mesh => {
+    mesh.visible = (targetPart === null || mesh === targetPart);
+  });
+  if (btnBack) {
+    btnBack.style.display = targetPart ? 'inline-block' : 'none'; // Use inline-block for button next to others
+  }
+  // Maybe disable explode/slice controls when focused?
+  explodeController.domElement.parentElement.parentElement.style.pointerEvents = targetPart ? 'none' : '';
+  explodeController.domElement.parentElement.parentElement.style.opacity = targetPart ? '0.5' : '1';
+  sliceController.domElement.parentElement.parentElement.style.pointerEvents = targetPart ? 'none' : '';
+  sliceController.domElement.parentElement.parentElement.style.opacity = targetPart ? '0.5' : '1';
+}
+
+function focusOnPart(selectedMesh) {
+  if (!selectedMesh || selectedMesh === currentlyFocusedPart) return;
+
+  // Store previous state only if not already focused
+  if (!currentlyFocusedPart) {
+    previousCameraState.position = camera.position.clone();
+    previousCameraState.target = controls.target.clone();
+  }
+
+  setFocusState(selectedMesh);
+  params.explode = 0; // Reset explode when focusing
+  explode(0);
+  gui.refresh(); // Update GUI display for explode slider
+
+  // Calculate bounding box and target camera position
+  const box = new THREE.Box3().setFromObject(selectedMesh);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3()).length();
+  const camDistance = size * 1.5; // Adjust multiplier for desired distance
+
+  // Use GSAP for smooth animation
+  gsap.to(camera.position, {
+    duration: 0.8,
+    x: center.x + camDistance * 0.6, // Adjust view angle
+    y: center.y + camDistance * 0.4,
+    z: center.z + camDistance * 0.6,
+    ease: "power2.inOut",
+    onUpdate: () => camera.lookAt(center) // Ensure camera keeps looking at center during tween
+  });
+  gsap.to(controls.target, {
+    duration: 0.8,
+    x: center.x,
+    y: center.y,
+    z: center.z,
+    ease: "power2.inOut"
+  });
+
+}
+
+function goBackToFullView(animate = true) {
+  if (!currentlyFocusedPart) return;
+
+  const targetPosition = previousCameraState.position || new THREE.Vector3(3, 2, 6); // Default if no state saved
+  const targetTarget = previousCameraState.target || new THREE.Vector3(0, 0, 0);
+
+  setFocusState(null);
+  params.explode = 0; // Ensure explode is reset
+  explode(0);
+  gui.refresh(); // Update GUI
+
+  if (animate && previousCameraState.position && previousCameraState.target) {
+      gsap.to(camera.position, {
+          duration: 0.8,
+          x: targetPosition.x,
+          y: targetPosition.y,
+          z: targetPosition.z,
+          ease: "power2.inOut",
+          onUpdate: () => camera.lookAt(controls.target) // Look at the animating target
+      });
+      gsap.to(controls.target, {
+          duration: 0.8,
+          x: targetTarget.x,
+          y: targetTarget.y,
+          z: targetTarget.z,
+          ease: "power2.inOut"
+      });
+  } else {
+      // If not animating or no previous state, jump instantly
+      camera.position.copy(targetPosition);
+      controls.target.copy(targetTarget);
+  }
+}
+
+function onCanvasClick(event) {
+  // Don't select if interacting with GUI
+  if (gui.domElement.contains(event.target) || (btnBack && btnBack.contains(event.target))) {
+      return;
+  }
+  // Don't select if recording controls are interacted with
+  if (event.target.closest('.card-footer')) {
+      return;
+  }
+  // Don't select if already focused and clicking the background
+  if (currentlyFocusedPart && event.target === renderer.domElement) {
+      // Calculate mouse position relative to the canvas
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(parts); // Only check parts
+
+      // If click was on canvas bg (no intersection), go back
+      if (intersects.length === 0) {
+          goBackToFullView();
+          return; // Don't proceed to select
+      }
+  }
+
+  // Calculate mouse position relative to the canvas
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(parts); // Only check parts
+
+  if (intersects.length > 0) {
+    // Check if the first intersected object is visible (avoids selecting hidden parts)
+    if (intersects[0].object.visible) {
+        focusOnPart(intersects[0].object);
+    }
+  }
+}
+
+// Add event listeners
+renderer.domElement.addEventListener('click', onCanvasClick);
+if (btnBack) {
+  btnBack.addEventListener('click', () => goBackToFullView());
+}
+
 /* ---------- Recording/Playback Logic ---------- */
 
 function updateButtonStates() {
@@ -253,6 +409,7 @@ function updateButtonStates() {
   btnStop.disabled = recordingState !== 'recording';
   btnPlay.disabled = recordingState === 'recording' || recordingState === 'playing' || audioChunks.length === 0;
   btnPause.disabled = recordingState !== 'playing';
+  if (btnBack) btnBack.disabled = recordingState === 'recording' || recordingState === 'playing';
   // Disable sliders during playback/recording?
   // explodeSlider.disabled = recordingState === 'recording' || recordingState === 'playing';
   // sliceSlider.disabled = recordingState === 'recording' || recordingState === 'playing';
@@ -304,7 +461,9 @@ async function startRecording() {
     mediaRecorder.start();
 
     // Start capturing state periodically (e.g., 10 times per second)
-    stateCaptureInterval = setInterval(captureState, 100); 
+    // Make sure we're not focused when starting recording
+    goBackToFullView(false);
+    stateCaptureInterval = setInterval(captureState, 100);
 
   } catch (err) {
     console.error('Error accessing microphone:', err);
@@ -326,7 +485,8 @@ function captureState() {
     cameraPosition: camera.position.clone(),
     controlsTarget: controls.target.clone(),
     explodeValue: params.explode,
-    sliceValue: params.slice
+    sliceValue: params.slice,
+    focusedPartIndex: currentlyFocusedPart ? parts.indexOf(currentlyFocusedPart) : -1 // -1 for no focus
   };
   recordedEvents.push(state);
 }
@@ -402,50 +562,74 @@ function runPlaybackLoop() {
   }
 
   const currentTimeMs = currentAudio.currentTime * 1000;
-  
+  const currentPlaybackTime = currentAudio.currentTime;
+  const totalDuration = currentAudio.duration;
+
   // Find the latest event that should have occurred by currentTimeMs
   let eventToApply = null;
-  for (let i = lastAppliedEventIndex + 1; i < recordedEvents.length; i++) {
+  // Ensure we check from the beginning if looping or starting
+  let searchStartIndex = lastAppliedEventIndex + 1;
+  // If playback time jumped backwards (e.g., seeking), reset search
+  // Note: Simple check, might need refinement for precise seeking.
+  if (recordedEvents[lastAppliedEventIndex] && currentTimeMs < recordedEvents[lastAppliedEventIndex].timestamp) {
+      searchStartIndex = 0;
+      lastAppliedEventIndex = -1; // Reset index if time went backwards
+  }
+
+
+  for (let i = searchStartIndex; i < recordedEvents.length; i++) {
     if (recordedEvents[i].timestamp <= currentTimeMs) {
         eventToApply = recordedEvents[i];
         lastAppliedEventIndex = i;
     } else {
         // Events are ordered by timestamp, so we can stop searching
-        break; 
+        break;
     }
   }
 
   // Apply the state if a new event was found
   if (eventToApply) {
-    // Apply camera state smoothly?
-    // camera.position.lerp(eventToApply.cameraPosition, 0.5); // Example: lerp
-    // controls.target.lerp(eventToApply.controlsTarget, 0.5);
+    // Apply camera state directly from recording
     camera.position.copy(eventToApply.cameraPosition);
     controls.target.copy(eventToApply.controlsTarget);
-    
-    // Apply slider states
+    controls.update(); // Important after manually setting camera/target
+
+    // Apply slider states ONLY if they changed
     if (params.explode !== eventToApply.explodeValue) {
         params.explode = eventToApply.explodeValue;
         explode(params.explode);
+        if (explodeController) explodeController.updateDisplay(); // Update GUI
     }
     if (params.slice !== eventToApply.sliceValue) {
         params.slice = eventToApply.sliceValue;
         clipPlane.constant = params.slice;
+        if (sliceController) sliceController.updateDisplay(); // Update GUI
     }
 
-    // Update GUI to reflect changes (might be slow if done every frame)
-    // gui.refresh(); 
-    // A more efficient way might be needed for complex GUIs
-    // Update the specific GUI controllers directly
-    if (explodeController) explodeController.updateDisplay();
-    if (sliceController) sliceController.updateDisplay();
+    // Apply focus state ONLY if it changed
+    const recordedFocusIndex = eventToApply.focusedPartIndex;
+    const currentFocusIndex = currentlyFocusedPart ? parts.indexOf(currentlyFocusedPart) : -1;
 
+    if (recordedFocusIndex !== currentFocusIndex) {
+        setFocusState(recordedFocusIndex === -1 ? null : parts[recordedFocusIndex]);
+        // Explode value might need resetting if focus changes, handled by setFocusState calling explode(0) indirectly if needed?
+        // Let's ensure explode is applied correctly after focus change
+        if (params.explode !== eventToApply.explodeValue) {
+           explode(params.explode); // Re-apply recorded explode after focus change
+        }
+    }
   }
 
-  // Update progress bar and time display
-  const progressPercent = (currentAudio.currentTime / currentAudio.duration) * 100;
-  updateProgressBar(progressPercent);
-  updateTimeDisplay(currentAudio.currentTime, currentAudio.duration);
+  // Update progress bar and time display using current time and duration
+  if (totalDuration > 0) {
+      const progressPercent = (currentPlaybackTime / totalDuration) * 100;
+      updateProgressBar(progressPercent);
+      updateTimeDisplay(currentPlaybackTime, totalDuration);
+  } else {
+      // Handle case where duration might still be NaN or 0
+      updateProgressBar(0);
+      updateTimeDisplay(0);
+  }
 
   // Continue the loop
   playbackLoop = requestAnimationFrame(runPlaybackLoop);
@@ -473,6 +657,7 @@ function resetRecording() {
   mediaRecorder = null;
   recordingState = 'idle';
   lastAppliedEventIndex = -1;
+  setFocusState(null); // Ensure focus is reset
   updateButtonStates();
   updateProgressBar(0);
   updateTimeDisplay(0);
