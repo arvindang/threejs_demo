@@ -1,31 +1,12 @@
-import * as THREE from 'https://unpkg.com/three@0.164.0/build/three.module.js';
-import { OrbitControls } from 'https://unpkg.com/three@0.164.0/examples/jsm/controls/OrbitControls.js';
-import { GLTFLoader } from 'https://unpkg.com/three@0.164.0/examples/jsm/loaders/GLTFLoader.js';
-import { GUI } from 'https://unpkg.com/lil-gui@0.19.2/dist/lil-gui.module.js';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { GUI } from 'https://cdn.jsdelivr.net/npm/lil-gui@0.19.2/+esm';
 
 /* ---------- scene setup ---------- */
 const container = document.getElementById('viewer');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf8f9fa);
-
-// Add debugging element to the container
-const debugElement = document.createElement('div');
-debugElement.style.position = 'absolute';
-debugElement.style.top = '10px';
-debugElement.style.left = '10px';
-debugElement.style.background = 'rgba(0,0,0,0.7)';
-debugElement.style.color = 'white';
-debugElement.style.padding = '10px';
-debugElement.style.zIndex = '1000';
-debugElement.innerHTML = 'Initializing viewer...';
-container.appendChild(debugElement);
-
-// Debug function to show messages in the viewport
-function debug(message) {
-  debugElement.innerHTML += '<br>' + message;
-}
-
-debug('Setting up scene');
 
 const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
 camera.position.set(3, 2, 6);
@@ -38,13 +19,12 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
 
 /* Add lighting to the scene */
-debug('Adding lights');
 // Ambient light for overall illumination
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
 scene.add(ambientLight);
 
 // Directional light for shadows and directional lighting
-const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
 directionalLight.position.set(5, 10, 5);
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.width = 1024;
@@ -64,7 +44,6 @@ const axesHelper = new THREE.AxesHelper(2);
 scene.add(axesHelper);
 
 /* orbit / zoom / pan */
-debug('Setting up controls');
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
@@ -119,8 +98,6 @@ guiEl.style.fontSize = '14px';
 guiEl.style.userSelect = 'none';
 
 /* ---------- load GLB model ---------- */
-debug('Starting model loading...');
-
 // Add a wireframe cube as a placeholder
 const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
 const cubeMaterial = new THREE.MeshBasicMaterial({
@@ -131,105 +108,106 @@ const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
 scene.add(cube);
 
 const loader = new GLTFLoader();
-// Use a different model URL that's known to work well with Three.js
-const URL = 'https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf';
-// Fallback to original model if needed
-// const URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/GearboxAssy/glTF-Binary/GearboxAssy.glb';
+const URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/GearboxAssy/glTF-Binary/GearboxAssy.glb';
 
 let model, parts = [];
-loader.load(URL, (gltf) => {
-  debug('Model loaded! Processing...');
-  
-  // Remove placeholder cube
-  scene.remove(cube);
-  
-  model = gltf.scene;
-  scene.add(model);
 
-  /* collect child meshes for explode algorithm */
-  let partCount = 0;
-  model.traverse((obj) => {
-    if (obj.isMesh) {
-      // Enable shadows
-      obj.castShadow = true;
-      obj.receiveShadow = true;
-      
-      // Store original position for explode view
-      obj.userData.origin = obj.position.clone();
-      parts.push(obj);
-      partCount++;
-      
-      // Force PBR material settings
-      if (obj.material) {
-        // Create a new MeshStandardMaterial if needed
-        if (!obj.material.isMeshStandardMaterial) {
-          const oldMat = obj.material;
-          const newMat = new THREE.MeshStandardMaterial({
-            color: oldMat.color || new THREE.Color(0x808080),
-            map: oldMat.map,
-            metalness: 0.5,
-            roughness: 0.5
-          });
-          obj.material = newMat;
-        } else {
-          // Just update the existing material
-          obj.material.metalness = 0.5;
-          obj.material.roughness = 0.5;
-        }
-        
-        // Assign different colors to materials based on index
-        const colorIndex = parts.length % 6;
-        const colors = [
-          0xE57373, // red
-          0x81C784, // green
-          0x64B5F6, // blue
-          0xFFD54F, // yellow
-          0xBA68C8, // purple
-          0x4DB6AC  // teal
-        ];
-        obj.material.color.setHex(colors[colorIndex]);
-        obj.material.needsUpdate = true;
-      }
+loader.load(
+  URL, 
+  // Success callback
+  (gltf) => {
+    // Remove placeholder cube
+    scene.remove(cube);
+    
+    model = gltf.scene;
+    scene.add(model);
+
+    /* Check for animations */
+    if (gltf.animations && gltf.animations.length > 0) {
+      console.log('Model contains animations:', gltf.animations);
+      // You could store these animations for later use:
+      // model.animations = gltf.animations; 
+    } else {
+      console.log('Model does not contain animations.');
     }
-  });
-  
-  debug(`Found ${partCount} mesh parts in the model`);
 
-  /* centre and scale */
-  const box = new THREE.Box3().setFromObject(model);
-  const size = box.getSize(new THREE.Vector3()).length();
-  const centre = box.getCenter(new THREE.Vector3());
-  model.position.sub(centre);      // centre at (0,0,0)
-  camera.position.set(size * 0.6, size * 0.3, size * 0.6);
+    /* collect child meshes for explode algorithm */
+    let partCount = 0;
+    model.traverse((obj) => {
+      if (obj.isMesh) {
+        // Enable shadows
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+        
+        // Store original position for explode view
+        obj.userData.origin = obj.position.clone();
+        parts.push(obj);
+        partCount++;
+        
+        // Force PBR material settings
+        if (obj.material) {
+          // Create a new MeshStandardMaterial if needed
+          if (!obj.material.isMeshStandardMaterial) {
+            const oldMat = obj.material;
+            const newMat = new THREE.MeshStandardMaterial({
+              color: oldMat.color || new THREE.Color(0x808080),
+              map: oldMat.map,
+              metalness: 0.3,
+              roughness: 0.7
+            });
+            obj.material = newMat;
+          } else {
+            // Just update the existing material
+            obj.material.metalness = 0.3;
+            obj.material.roughness = 0.7;
+          }
+          
+          // Assign different colors to materials based on index
+          const colorIndex = parts.length % 6;
+          const colors = [
+            0xE57373, // red
+            0x81C784, // green
+            0x64B5F6, // blue
+            0xFFD54F, // yellow
+            0xBA68C8, // purple
+            0x4DB6AC  // teal
+          ];
+          const hexColor = colors[colorIndex];
+          obj.material.color.setHex(hexColor);
+          obj.material.needsUpdate = true;
+        }
+      }
+    });
+
+    /* centre and scale */
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3()).length();
+    const centre = box.getCenter(new THREE.Vector3());
+    model.position.sub(centre);      // centre at (0,0,0)
+    camera.position.set(size * 0.6, size * 0.3, size * 0.6);
+  },
   
-  // Update debug info
-  debug('Model processing complete');
-}, 
-// Add progress callback to track loading
-(xhr) => {
-  if (xhr.lengthComputable) {
-    const percentComplete = Math.round((xhr.loaded / xhr.total) * 100);
-    debug(`Loading: ${percentComplete}%`);
+  // Progress callback (optional)
+  () => {},
+
+  // Error callback
+  (error) => {
+    const errorMsg = `ERROR loading GLTF model: ${error.message || 'Unknown loading error'}`;
+    console.error(errorMsg, error);
   }
-}, 
-// Improve error logging
-(error) => {
-  debug(`ERROR: ${error.message || 'Unknown loading error'}`);
-});
+);
 
 // Add an environment map for reflections and better lighting
-debug('Loading environment map...');
 const envMapTexture = new THREE.TextureLoader().load(
   'https://threejs.org/examples/textures/2294472375_24a3b8ef46_o.jpg', 
   function(texture) {
     texture.mapping = THREE.EquirectangularReflectionMapping;
     texture.colorSpace = THREE.SRGBColorSpace;
-    scene.environment = texture;
-    debug('Environment map loaded');
+    scene.environment = texture; // Assign inside onLoad
   },
   undefined,
   function(error) {
-    debug(`ERROR loading environment map: ${error.message || 'Unknown error'}`);
+    console.error(`ERROR loading environment map: ${error.message || 'Unknown error'}`, error);
   }
 );
 
@@ -252,7 +230,6 @@ window.addEventListener('resize', onResize);
 onResize();
 
 /* render loop */
-debug('Starting render loop');
 renderer.setAnimationLoop(() => {
   controls.update();
   renderer.render(scene, camera);
