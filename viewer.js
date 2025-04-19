@@ -271,9 +271,9 @@ function setFocusState(targetPart) {
   parts.forEach(mesh => {
     mesh.visible = (targetPart === null || mesh === targetPart);
   });
-  if (btnBack) {
-    btnBack.style.display = targetPart ? 'inline-block' : 'none'; // Use inline-block for button next to others
-  }
+  // Update button state based on focus AND recording state
+  updateButtonStates();
+
   // Maybe disable explode/slice controls when focused?
   explodeController.domElement.parentElement.parentElement.style.pointerEvents = targetPart ? 'none' : '';
   explodeController.domElement.parentElement.parentElement.style.opacity = targetPart ? '0.5' : '1';
@@ -409,7 +409,10 @@ function updateButtonStates() {
   btnStop.disabled = recordingState !== 'recording';
   btnPlay.disabled = recordingState === 'recording' || recordingState === 'playing' || audioChunks.length === 0;
   btnPause.disabled = recordingState !== 'playing';
-  if (btnBack) btnBack.disabled = recordingState === 'recording' || recordingState === 'playing';
+  // Back button: Disable if playing OR if not focused on a part
+  if (btnBack) {
+    btnBack.disabled = (recordingState === 'playing' || currentlyFocusedPart === null);
+  }
   // Disable sliders during playback/recording?
   // explodeSlider.disabled = recordingState === 'recording' || recordingState === 'playing';
   // sliceSlider.disabled = recordingState === 'recording' || recordingState === 'playing';
