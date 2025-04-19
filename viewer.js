@@ -84,10 +84,10 @@ const gui = new GUI({
   container: container,
   width: 300
 });
-gui.add(params, 'explode', 0, 1, 0.01)
+const explodeController = gui.add(params, 'explode', 0, 1, 0.01)
    .name('Explode View')
    .onChange(explode);
-gui.add(params, 'slice', -1, 1, 0.01)
+const sliceController = gui.add(params, 'slice', -1, 1, 0.01)
    .name('Slice View')
    .onChange(value => {
      clipPlane.constant = value;
@@ -269,10 +269,7 @@ async function startRecording() {
     recordedEvents = [];
     recordingState = 'recording';
     recordingStartTime = performance.now();
-    console.log(`State set to: ${recordingState}. Preparing to update buttons.`);
-    console.log(`Before update - btnStop.disabled should become: ${recordingState !== 'recording'}`);
     updateButtonStates();
-    console.log(`After update - btnStop.disabled is: ${btnStop.disabled}`);
     console.log('Recording started...');
 
     mediaRecorder.ondataavailable = (event) => {
@@ -283,8 +280,6 @@ async function startRecording() {
 
     mediaRecorder.onstop = () => {
       const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-      console.log('Inside onstop. typeof window.URL:', typeof window.URL);
-      console.log('Inside onstop. typeof window.URL.createObjectURL:', typeof window.URL?.createObjectURL); 
       // Explicitly use window.URL
       try {
         currentAudio = new Audio(window.URL.createObjectURL(audioBlob));
@@ -441,12 +436,9 @@ function runPlaybackLoop() {
     // Update GUI to reflect changes (might be slow if done every frame)
     // gui.refresh(); 
     // A more efficient way might be needed for complex GUIs
-    // For now, let's update the specific controller values if possible
-    gui.__controllers.forEach(c => {
-        if (c.property === 'explode' || c.property === 'slice') {
-            c.updateDisplay();
-        }
-    });
+    // Update the specific GUI controllers directly
+    if (explodeController) explodeController.updateDisplay();
+    if (sliceController) sliceController.updateDisplay();
 
   }
 
