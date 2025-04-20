@@ -19,6 +19,11 @@ A simple prototype for a lesson with a 3D object that allows the user to manipul
 3. Start the server:
    ```
    npm start
+   
+   or
+   
+   npx serve .
+
    ```
 4. Open your browser and navigate to http://localhost:3000
 
