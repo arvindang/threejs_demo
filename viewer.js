@@ -355,7 +355,7 @@ class Viewer3D {
     this.previousCameraState = { position: null, target: null };
     
     // Add a test cube to verify 3D rendering is working
-    this.addTestCube();
+    // this.addTestCube(); // Removed to show only text placeholder
     
     this.onResize();
     window.addEventListener('resize', () => this.onResize());
