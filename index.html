@@ -144,6 +144,24 @@
       display: flex;
       align-items: center;
       gap: 0.5rem;
+      flex-wrap: wrap;
+      min-height: 60px;
+      overflow: visible;
+    }
+    
+    .viewer-3d-controls .form-range {
+      min-width: 80px;
+      flex-shrink: 0;
+    }
+    
+    .viewer-3d-controls .btn {
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    
+    .viewer-3d-controls .form-label {
+      flex-shrink: 0;
+      white-space: nowrap;
     }
     
     /* Content viewer styles */
@@ -229,6 +247,47 @@
     .d-none {
       display: none !important;
     }
+    
+    /* Responsive adjustments for small screens */
+    @media (max-width: 768px) {
+      .viewer-3d-controls {
+        padding: 0.5rem;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+      }
+      
+      .viewer-3d-controls .d-flex {
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+      
+      .viewer-3d-controls .form-range {
+        width: 60px !important;
+        min-width: 60px;
+      }
+      
+      .viewer-3d-controls .form-label {
+        font-size: 0.875rem;
+      }
+      
+      .viewer-3d-controls .btn-sm {
+        font-size: 0.8rem;
+        padding: 0.25rem 0.5rem;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      .viewer-3d-controls .form-range {
+        width: 50px !important;
+        min-width: 50px;
+      }
+      
+      .viewer-3d-controls .form-label {
+        font-size: 0.8rem;
+      }
+    }
   </style>
 </head>
 <body class="bg-light">
@@ -306,15 +365,17 @@
     <div class="content-pane viewer-3d-pane">
       <!-- 3D Controls Bar -->
       <div class="viewer-3d-controls">
-        <label class="form-label mb-0 me-2">Explode:</label>
-        <input type="range" id="explodeSlider" class="form-range" min="0" max="1" step="0.01" value="0" style="width: 100px;">
-        
-        <label class="form-label mb-0 me-2 ms-3">Slice:</label>
-        <input type="range" id="sliceSlider" class="form-range" min="-1" max="1" step="0.01" value="0" style="width: 100px;">
-        
-        <button id="resetViewBtn" class="btn btn-outline-secondary btn-sm ms-3">
-          <i class="bi bi-arrow-clockwise me-1"></i>Reset View
-        </button>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <label class="form-label mb-0 me-1">Explode:</label>
+          <input type="range" id="explodeSlider" class="form-range" min="0" max="1" step="0.01" value="0" style="width: 80px;">
+          
+          <label class="form-label mb-0 me-1 ms-2">Slice:</label>
+          <input type="range" id="sliceSlider" class="form-range" min="-1" max="1" step="0.01" value="0" style="width: 80px;">
+          
+          <button id="resetViewBtn" class="btn btn-outline-secondary btn-sm ms-2">
+            <i class="bi bi-arrow-clockwise me-1"></i>Reset
+          </button>
+        </div>
         
         <!-- Back button for focused view -->
         <button id="btnBack" class="btn btn-outline-secondary btn-sm ms-auto" style="display: none;">
