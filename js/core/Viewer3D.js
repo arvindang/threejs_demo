@@ -180,11 +180,13 @@ export class Viewer3D {
     const xraySlider = document.getElementById('xraySlider');
     if (xraySlider) {
       xraySlider.addEventListener('input', (e) => {
-        const transparency = parseFloat(e.target.value);
-        this.setXrayMode(transparency);
+        const transparencyPercentage = parseFloat(e.target.value);
+        // User's "transparency" percentage should directly correspond to material opacity
+        // 100% transparency = fully opaque, 0% transparency = fully transparent
+        this.setXrayMode(transparencyPercentage);
         const xrayValue = document.getElementById('xrayValue');
         if (xrayValue) {
-          xrayValue.textContent = Math.round(transparency * 100) + '%';
+          xrayValue.textContent = Math.round(transparencyPercentage * 100) + '%';
         }
       });
     }
@@ -868,6 +870,8 @@ export class Viewer3D {
     const sliceSlider = document.getElementById('sliceSlider');
     const explodeValue = document.getElementById('explodeValue');
     const sliceValue = document.getElementById('sliceValue');
+    const xraySlider = document.getElementById('xraySlider');
+    const xrayValue = document.getElementById('xrayValue');
     
     if (explodeSlider) {
       explodeSlider.value = 0;
@@ -878,6 +882,13 @@ export class Viewer3D {
       sliceSlider.value = 1;
       if (sliceValue) sliceValue.textContent = '100%';
     }
+    
+    // Reset x-ray mode to fully opaque (100% transparency in user terms)
+    if (xraySlider) {
+      xraySlider.value = 1;
+      if (xrayValue) xrayValue.textContent = '100%';
+    }
+    this.setXrayMode(1); // 1 = fully opaque
     
     // Reset camera to fit model
     if (this.currentlyFocusedPart) {
@@ -1038,13 +1049,13 @@ export class Viewer3D {
           this.originalMaterialOpacity.set(part, part.material.opacity || 1.0);
         }
         
-        if (transparency > 0) {
-          // Enable x-ray mode
+        if (transparency < 1.0) {
+          // Enable x-ray mode - transparency is now the actual opacity value
           part.material.transparent = true;
           part.material.opacity = transparency;
           this.isXrayMode = true;
         } else {
-          // Disable x-ray mode - restore original opacity
+          // Disable x-ray mode - restore original opacity when at 100%
           const originalOpacity = this.originalMaterialOpacity.get(part);
           part.material.opacity = originalOpacity;
           part.material.transparent = originalOpacity < 1.0;
@@ -1055,6 +1066,6 @@ export class Viewer3D {
       }
     });
     
-    console.log('X-ray mode:', transparency > 0 ? `${Math.round(transparency * 100)}%` : 'disabled');
+    console.log('X-ray mode:', transparency < 1.0 ? `opacity: ${transparency.toFixed(2)}` : 'disabled');
   }
 } 
