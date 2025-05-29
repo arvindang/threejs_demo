@@ -1,75 +1,75 @@
-# Interactive 3D Learning Platform
+# 🎉 Interactive 3D Learning Platform Demo
 
-A prototype for creating synchronized lessons that combine 3D models with traditional educational content (PDFs, images) while recording instructor interactions for student playback.
+The server is running at **http://localhost:3000**
 
-## 🎯 Vision
+## What You Can Do Now:
 
-This platform enables instructors to create the "textbook of the future" for medical and engineering education by synchronizing 3D model interactions with traditional content, guided by instructor narration.
+### 1. **Upload 3D Models** 
+- Drag GLB or GLTF files to the left drawer
+- Try the sample gearbox model that loads automatically
+- Click on parts to focus and isolate them
+- Use explode and slice controls
 
-## ✨ Features
+### 2. **Upload Content**
+- Drag PDF, PNG, or JPG files to the right drawer
+- Navigate through PDF pages with controls
+- Zoom in and out on content
+- Switch between different uploaded files
 
-### Two-Pane Layout
-- **Left Pane**: 3D model viewer with interactive controls
-- **Right Pane**: Content viewer supporting PDF and image files
-- **Collapsible Drawers**: Asset management for both 3D models and content
+### 3. **Record Lessons**
+- Click the red record button in the header
+- Interact with both the 3D model and content
+- Narrate your lesson while manipulating objects
+- Stop recording and play back your lesson
 
-### File Management
-- **Drag & Drop**: Upload 3D models (GLB/GLTF) and content (PDF/PNG/JPG)
-- **Asset Library**: Manage multiple files with easy switching
-- **Local Storage**: Files persist in browser session
+### 4. **Explore Features**
+- **Collapsible Drawers**: Toggle asset panels on/off
+- **Asset Management**: Upload, switch, and delete files
+- **3D Interactions**: Rotate, zoom, explode, slice, focus
+- **Content Navigation**: Page controls, zoom, pan
 
-### 3D Viewer
-- **Model Loading**: Support for GLB and GLTF files
-- **Interactive Controls**: Explode view, slice view, part isolation
-- **Object Selection**: Click to focus on individual parts
-- **Smooth Animations**: GSAP-powered camera transitions
+## Test Files You Can Use:
 
-### Content Viewer
-- **PDF Support**: Full PDF viewing with page navigation and zoom
-- **Image Support**: Display PNG, JPG images with zoom controls
-- **Navigation**: Page controls for multi-page documents
+### 3D Models (GLB/GLTF)
+- Download from [Sketchfab](https://sketchfab.com/3d-models?features=downloadable&sort_by=-likeCount)
+- Try [Khronos Sample Models](https://github.com/KhronosGroup/glTF-Sample-Models)
+- Use any GLB or GLTF file you have
 
-### Recording System
-- **Audio Recording**: Capture instructor narration
-- **Interaction Tracking**: Record 3D manipulations and content navigation
-- **Synchronized Playback**: Replay lessons with perfect timing
+### Content Files
+- **PDFs**: Any PDF document, technical manuals, textbooks
+- **Images**: PNG or JPG files, diagrams, charts, photos
 
-## 🚀 Quick Start
+## Getting Started:
 
-1. **Start the server**:
-   ```bash
-   npm install
-   node server.js
-   ```
+0. ``` npm start ```
+1. **Open** http://localhost:3000 in Chrome
+2. **Upload** a 3D model to the left drawer
+3. **Upload** a PDF or image to the right drawer
+4. **Click Record** and start teaching!
+5. **Interact** with both panes while narrating
+6. **Stop** and **Play** to review your lesson
 
-2. **Open your browser** to `http://localhost:3000`
+## Current Features ✅
 
-3. **Upload content**:
-   - Drag 3D models (GLB/GLTF) to the left drawer
-   - Drag content files (PDF/PNG/JPG) to the right drawer
+- ✅ Two-pane layout with collapsible drawers
+- ✅ Drag-and-drop file upload
+- ✅ 3D model loading and interaction
+- ✅ PDF viewing with navigation
+- ✅ Image viewing with zoom
+- ✅ Basic recording and playback
+- ✅ Asset management system
 
-4. **Create a lesson**:
-   - Load a 3D model and content file
-   - Click record and start teaching
-   - Interact with both the 3D model and content
-   - Stop recording when finished
+## Coming Soon 🚀
 
-5. **Playback**:
-   - Click play to review your recorded lesson
+- Enhanced 3D selection sensitivity
+- PowerPoint support
+- Synchronized recording of both panes
+- Annotation and pointer tools
+- Mobile responsiveness
 
-## 📁 Project Structure
-
-```
-threejs_demo/
-├── index.html          # Two-pane UI layout
-├── viewer.js           # Core application logic
-├── style.css           # Custom styles
-├── server.js           # Development server
-├── package.json        # Dependencies
-├── README.md           # This file
-├── todo.md             # Development roadmap
-└── claude.md           # Technical documentation
-```
+## Need Help?
+- See `todo.md` for development roadmap
+- Review `claude.md` for technical details
 
 ## 🛠️ Technology Stack
 
@@ -80,47 +80,6 @@ threejs_demo/
 - **Animations**: GSAP
 - **File Handling**: HTML5 File API with drag-and-drop
 
-## 🎮 Usage Guide
-
-### Uploading Files
-1. **3D Models**: Drag GLB or GLTF files to the left drawer or click "Browse Files"
-2. **Content**: Drag PDF, PNG, or JPG files to the right drawer or click "Browse Files"
-
-### 3D Interaction
-- **Rotate**: Click and drag to orbit around the model
-- **Zoom**: Scroll wheel to zoom in/out
-- **Select Parts**: Click on model parts to focus and isolate
-- **Explode View**: Use the GUI slider to separate parts
-- **Slice View**: Use the GUI slider to cut through the model
-
-### Content Navigation
-- **PDF Files**: Use page navigation buttons and zoom controls
-- **Images**: Use zoom controls to examine details
-
-### Recording Lessons
-1. Set up your 3D model and content
-2. Click the red record button
-3. Narrate while interacting with both panes
-4. Click stop when finished
-5. Use play button to review
-
-## 🔧 Development
-
-### Current Status
-- ✅ Two-pane layout with collapsible drawers
-- ✅ Drag-and-drop file upload
-- ✅ 3D model loading and interaction
-- ✅ PDF and image viewing
-- ✅ Basic recording and playback
-- ✅ Asset management system
-
-### Next Steps
-See `todo.md` for detailed development roadmap including:
-- Enhanced recording with state synchronization
-- Improved 3D selection sensitivity
-- Mobile responsiveness
-- Advanced annotation tools
-
 ## 🎯 Target Use Cases
 
 - **Medical Education**: Anatomy lessons with 3D organs and textbook diagrams
@@ -128,19 +87,4 @@ See `todo.md` for detailed development roadmap including:
 - **Architecture**: Building models with floor plans and specifications
 - **Science**: Molecular structures with research papers
 
-## 📖 Documentation
-
-- **Technical Guide**: See `claude.md` for detailed architecture and development patterns
-- **Development Roadmap**: See `todo.md` for planned features and priorities
-
-## 🤝 Contributing
-
-This is a prototype project. For development guidelines and architecture details, see `claude.md`.
-
-## 📄 License
-
-MIT License - see LICENSE file for details.
-
----
-
-**Note**: This is a proof-of-concept focused on Chrome desktop. For production use, additional browser compatibility and mobile support would be needed.
+**Happy Learning!** 🎓 
