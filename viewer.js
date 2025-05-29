@@ -354,6 +354,16 @@ class Viewer3D {
     this.currentlyFocusedPart = null;
     this.previousCameraState = { position: null, target: null };
     
+    // Animation system
+    this.mixer = null;
+    this.animations = [];
+    this.currentAction = null;
+    this.clock = new THREE.Clock();
+    
+    // X-ray system
+    this.originalMaterialOpacity = new Map();
+    this.isXrayMode = false;
+    
     // Add a test cube to verify 3D rendering is working
     // this.addTestCube(); // Removed to show only text placeholder
     
@@ -452,6 +462,55 @@ class Viewer3D {
       });
     });
 
+    // Connect animation controls
+    const animationSelect = document.getElementById('animationSelect');
+    const animationPlay = document.getElementById('animationPlay');
+    const animationPause = document.getElementById('animationPause');
+    const animationStop = document.getElementById('animationStop');
+    const animationSpeed = document.getElementById('animationSpeed');
+    
+    if (animationSelect) {
+      animationSelect.addEventListener('change', (e) => {
+        this.selectAnimation(e.target.value);
+      });
+    }
+    
+    if (animationPlay) {
+      animationPlay.addEventListener('click', () => this.playAnimation());
+    }
+    
+    if (animationPause) {
+      animationPause.addEventListener('click', () => this.pauseAnimation());
+    }
+    
+    if (animationStop) {
+      animationStop.addEventListener('click', () => this.stopAnimation());
+    }
+    
+    if (animationSpeed) {
+      animationSpeed.addEventListener('input', (e) => {
+        const speed = parseFloat(e.target.value);
+        this.setAnimationSpeed(speed);
+        const speedValue = document.getElementById('animationSpeedValue');
+        if (speedValue) {
+          speedValue.textContent = speed.toFixed(1) + 'x';
+        }
+      });
+    }
+
+    // Connect x-ray controls
+    const xraySlider = document.getElementById('xraySlider');
+    if (xraySlider) {
+      xraySlider.addEventListener('input', (e) => {
+        const transparency = parseFloat(e.target.value);
+        this.setXrayMode(transparency);
+        const xrayValue = document.getElementById('xrayValue');
+        if (xrayValue) {
+          xrayValue.textContent = Math.round(transparency * 100) + '%';
+        }
+      });
+    }
+
     // Connect back button
     const backBtn = document.getElementById('btnBack');
     if (backBtn) {
@@ -506,6 +565,15 @@ class Viewer3D {
         
       case 'slice':
         this.showToolControls('sliceControls');
+        break;
+        
+      case 'animation':
+        this.showToolControls('animationControls');
+        this.updateAnimationUI();
+        break;
+        
+      case 'xray':
+        this.showToolControls('xrayControls');
         break;
         
       case 'reset':
@@ -756,10 +824,14 @@ class Viewer3D {
         this.updateSliceDirection();
         this.updateSlice();
         
+        // Setup animations if available
+        this.setupAnimations(gltf.animations);
+        
         console.log(`✅ Successfully loaded model: ${name}`);
         console.log(`   - Parts found: ${this.parts.length}`);
         console.log(`   - Model size: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}`);
         console.log(`   - Camera positioned at: ${this.camera.position.x.toFixed(2)}, ${this.camera.position.y.toFixed(2)}, ${this.camera.position.z.toFixed(2)}`);
+        console.log(`   - Animations found: ${gltf.animations?.length || 0}`);
       },
       (progress) => {
         if (progress.total > 0) {
@@ -830,10 +902,14 @@ class Viewer3D {
         this.updateSliceDirection();
         this.updateSlice();
         
+        // Setup animations if available
+        this.setupAnimations(gltf.animations);
+        
         console.log(`✅ Successfully loaded GLTF model: ${name}`);
         console.log(`   - Parts found: ${this.parts.length}`);
         console.log(`   - Model size: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}`);
         console.log(`   - Camera positioned at: ${this.camera.position.x.toFixed(2)}, ${this.camera.position.y.toFixed(2)}, ${this.camera.position.z.toFixed(2)}`);
+        console.log(`   - Animations found: ${gltf.animations?.length || 0}`);
       },
       (progress) => {
         if (progress.total > 0) {
@@ -895,6 +971,18 @@ class Viewer3D {
   clearModel() {
     // Clear hover state first
     this.clearHover();
+    
+    // Stop animations
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+      this.mixer = null;
+    }
+    this.animations = [];
+    this.currentAction = null;
+    
+    // Clear x-ray mode
+    this.originalMaterialOpacity.clear();
+    this.isXrayMode = false;
     
     if (this.model) {
       this.scene.remove(this.model);
@@ -1148,6 +1236,14 @@ class Viewer3D {
     this.goBackToFullView(false);
     this.controls.reset();
     
+    // Reset animations
+    if (this.currentAction) {
+      this.currentAction.stop();
+    }
+    
+    // Reset x-ray mode
+    this.setXrayMode(0);
+    
     // Refit model to current pane size
     if (this.model) {
       this.fitModelToPane();
@@ -1159,12 +1255,20 @@ class Viewer3D {
     const sliceYRadio = document.getElementById('sliceY');
     const explodeValue = document.getElementById('explodeValue');
     const sliceValue = document.getElementById('sliceValue');
+    const animationSpeed = document.getElementById('animationSpeed');
+    const animationSpeedValue = document.getElementById('animationSpeedValue');
+    const xraySlider = document.getElementById('xraySlider');
+    const xrayValue = document.getElementById('xrayValue');
     
     if (explodeSlider) explodeSlider.value = 0;
     if (sliceSlider) sliceSlider.value = 1;
     if (sliceYRadio) sliceYRadio.checked = true;
     if (explodeValue) explodeValue.textContent = '0%';
     if (sliceValue) sliceValue.textContent = '100%';
+    if (animationSpeed) animationSpeed.value = 1;
+    if (animationSpeedValue) animationSpeedValue.textContent = '1.0x';
+    if (xraySlider) xraySlider.value = 0;
+    if (xrayValue) xrayValue.textContent = '0%';
   }
 
   onResize() {
@@ -1181,6 +1285,13 @@ class Viewer3D {
 
   animate() {
     requestAnimationFrame(() => this.animate());
+    
+    // Update animation mixer
+    if (this.mixer) {
+      const delta = this.clock.getDelta();
+      this.mixer.update(delta);
+    }
+    
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
@@ -1199,6 +1310,164 @@ class Viewer3D {
       this.scene.remove(this.testCube);
       this.testCube = null;
       console.log('🟢 Test cube removed');
+    }
+  }
+
+  setupAnimations(animations) {
+    if (!animations || animations.length === 0) {
+      this.animations = [];
+      this.mixer = null;
+      return;
+    }
+    
+    this.animations = [];
+    this.mixer = new THREE.AnimationMixer(this.model);
+    
+    // Create animation actions for each animation clip
+    animations.forEach((clip) => {
+      const action = this.mixer.clipAction(clip);
+      this.animations.push({
+        name: clip.name || `Animation ${this.animations.length + 1}`,
+        action: action,
+        clip: clip
+      });
+    });
+    
+    console.log(`Animations setup: ${this.animations.length} animations found`);
+  }
+
+  selectAnimation(animationName) {
+    if (!this.animations || this.animations.length === 0) return;
+    
+    // Stop current animation
+    if (this.currentAction) {
+      this.currentAction.stop();
+    }
+    
+    const animationData = this.animations.find(a => a.name === animationName);
+    if (animationData) {
+      this.currentAction = animationData.action;
+      this.updateAnimationButtons();
+    }
+  }
+
+  playAnimation() {
+    if (this.currentAction) {
+      this.currentAction.play();
+      this.updateAnimationButtons();
+    }
+  }
+
+  pauseAnimation() {
+    if (this.currentAction) {
+      this.currentAction.paused = true;
+      this.updateAnimationButtons();
+    }
+  }
+
+  stopAnimation() {
+    if (this.currentAction) {
+      this.currentAction.stop();
+      this.updateAnimationButtons();
+    }
+  }
+
+  setAnimationSpeed(speed) {
+    if (this.currentAction) {
+      this.currentAction.setEffectiveTimeScale(speed);
+    }
+  }
+
+  updateAnimationUI() {
+    const animationSelect = document.getElementById('animationSelect');
+    if (!animationSelect) return;
+    
+    // Clear existing options
+    animationSelect.innerHTML = '';
+    
+    if (!this.animations || this.animations.length === 0) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'No animations available';
+      animationSelect.appendChild(option);
+      this.updateAnimationButtons();
+      return;
+    }
+    
+    // Add animation options
+    this.animations.forEach((animationData) => {
+      const option = document.createElement('option');
+      option.value = animationData.name;
+      option.textContent = animationData.name;
+      animationSelect.appendChild(option);
+    });
+    
+    // Select first animation by default
+    if (this.animations.length > 0) {
+      animationSelect.value = this.animations[0].name;
+      this.selectAnimation(this.animations[0].name);
+    }
+  }
+
+  updateAnimationButtons() {
+    const hasAnimations = this.animations && this.animations.length > 0;
+    const hasAction = this.currentAction !== null;
+    const isPlaying = hasAction && this.currentAction.isRunning() && !this.currentAction.paused;
+    
+    document.getElementById('animationPlay').disabled = !hasAction || isPlaying;
+    document.getElementById('animationPause').disabled = !hasAction || !isPlaying;
+    document.getElementById('animationStop').disabled = !hasAction;
+    document.getElementById('animationSelect').disabled = !hasAnimations;
+  }
+
+  setXrayMode(transparency) {
+    if (!this.model) return;
+    
+    // Store original opacity if entering x-ray mode for the first time
+    if (transparency > 0 && !this.isXrayMode) {
+      this.originalMaterialOpacity.clear();
+      this.model.traverse((obj) => {
+        if (obj.isMesh && obj.material) {
+          // Handle both single materials and material arrays
+          const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+          materials.forEach((material, index) => {
+            const key = `${obj.uuid}_${index}`;
+            this.originalMaterialOpacity.set(key, {
+              material: material,
+              originalOpacity: material.opacity,
+              originalTransparent: material.transparent
+            });
+          });
+        }
+      });
+      this.isXrayMode = true;
+    }
+    
+    // Apply transparency
+    this.model.traverse((obj) => {
+      if (obj.isMesh && obj.material) {
+        const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+        materials.forEach((material, index) => {
+          const key = `${obj.uuid}_${index}`;
+          const originalData = this.originalMaterialOpacity.get(key);
+          
+          if (originalData) {
+            if (transparency > 0) {
+              material.transparent = true;
+              material.opacity = Math.max(0.1, originalData.originalOpacity - transparency);
+            } else {
+              // Restore original values
+              material.opacity = originalData.originalOpacity;
+              material.transparent = originalData.originalTransparent;
+            }
+          }
+        });
+      }
+    });
+    
+    // Exit x-ray mode if transparency is 0
+    if (transparency === 0) {
+      this.isXrayMode = false;
     }
   }
 }
