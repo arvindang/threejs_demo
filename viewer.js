@@ -649,21 +649,77 @@ class Viewer3D {
   explode(factor) {
     if (!this.model) return;
     
-    const center = new THREE.Vector3();
-    const box = new THREE.Box3().setFromObject(this.model);
-    box.getCenter(center);
-
+    // Reset all parts to their original positions first
     this.parts.forEach((part) => {
-      const direction = new THREE.Vector3()
-        .subVectors(part.userData.origin, center)
-        .normalize();
+      part.position.copy(part.userData.origin);
+    });
+    
+    if (factor === 0) return; // No explosion needed
+    
+    // Calculate model bounds for scale reference
+    const box = new THREE.Box3().setFromObject(this.model);
+    const modelSize = box.getSize(new THREE.Vector3());
+    const maxDimension = Math.max(modelSize.x, modelSize.y, modelSize.z);
+    
+    // Base explosion distance scaled by model size
+    const baseDistance = maxDimension * factor * 0.3;
+    
+    // If only one part, just move it slightly along its normal
+    if (this.parts.length === 1) {
+      const part = this.parts[0];
+      const direction = new THREE.Vector3(1, 1, 1).normalize();
+      part.position.copy(part.userData.origin).add(direction.multiplyScalar(baseDistance));
+      return;
+    }
+    
+    // Calculate center for reference
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    
+    // Sort parts by their distance from center for consistent ordering
+    const sortedParts = [...this.parts].sort((a, b) => {
+      const distA = a.userData.origin.distanceTo(center);
+      const distB = b.userData.origin.distanceTo(center);
+      return distA - distB;
+    });
+    
+    // Distribute parts in spherical coordinates for better separation
+    sortedParts.forEach((part, index) => {
+      // Calculate direction from center to part
+      let direction = new THREE.Vector3()
+        .subVectors(part.userData.origin, center);
       
-      const distance = factor * 2;
-      const newPosition = new THREE.Vector3()
-        .copy(part.userData.origin)
-        .add(direction.multiplyScalar(distance));
+      // If part is too close to center, assign a unique direction
+      if (direction.length() < 0.001) {
+        // Distribute around sphere based on index
+        const phi = Math.acos(1 - 2 * (index + 0.5) / this.parts.length); // Polar angle
+        const theta = Math.PI * (1 + Math.sqrt(5)) * index; // Azimuthal angle (golden ratio)
+        
+        direction.set(
+          Math.sin(phi) * Math.cos(theta),
+          Math.cos(phi),
+          Math.sin(phi) * Math.sin(theta)
+        );
+      } else {
+        direction.normalize();
+      }
       
-      part.position.copy(newPosition);
+      // Add some randomization to prevent exact alignments causing overlaps
+      const randomOffset = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.2,
+        (Math.random() - 0.5) * 0.2,
+        (Math.random() - 0.5) * 0.2
+      );
+      direction.add(randomOffset).normalize();
+      
+      // Calculate explosion distance - parts further from center move more
+      const partDistFromCenter = part.userData.origin.distanceTo(center);
+      const distanceMultiplier = 1 + (partDistFromCenter / maxDimension) * 0.5;
+      const explosionDistance = baseDistance * distanceMultiplier;
+      
+      // Apply explosion offset
+      const explosionOffset = direction.multiplyScalar(explosionDistance);
+      part.position.copy(part.userData.origin).add(explosionOffset);
     });
   }
 
