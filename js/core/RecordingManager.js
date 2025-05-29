@@ -80,8 +80,11 @@ export class RecordingManager {
     // Store original methods safely
     const originalMethods = {};
     
-    // Only override if methods exist and are writable
-    const methodsToOverride = ['focusOnPart', 'goBackToFullView', 'setExplodeAmount', 'setSliceAmount', 'setXRayAmount', 'loadModel'];
+    // Expanded list to include animation and reset methods
+    const methodsToOverride = [
+      'focusOnPart', 'goBackToFullView', 'setExplodeAmount', 'setSliceAmount', 'setXRayAmount', 
+      'loadModel', 'reset', 'selectAnimation', 'playAnimation', 'pauseAnimation', 'stopAnimation', 'setAnimationSpeed'
+    ];
     
     methodsToOverride.forEach(methodName => {
       if (typeof viewer[methodName] === 'function') {
@@ -110,6 +113,14 @@ export class RecordingManager {
                 viewer[methodName] = (...args) => {
                   const result = originalMethods[methodName](...args);
                   this.recordDiscreteEvent('3d_back_to_full');
+                  return result;
+                };
+                break;
+                
+              case 'reset':
+                viewer[methodName] = (...args) => {
+                  const result = originalMethods[methodName](...args);
+                  this.recordDiscreteEvent('3d_reset');
                   return result;
                 };
                 break;
@@ -144,6 +155,50 @@ export class RecordingManager {
                   this.recordDiscreteEvent('3d_model_load', { 
                     modelUrl: args[0],
                     modelName: args[1] 
+                  });
+                  return result;
+                };
+                break;
+                
+              case 'selectAnimation':
+                viewer[methodName] = (animationName) => {
+                  const result = originalMethods[methodName](animationName);
+                  this.recordDiscreteEvent('3d_animation_select', { 
+                    animationName 
+                  });
+                  return result;
+                };
+                break;
+                
+              case 'playAnimation':
+                viewer[methodName] = (...args) => {
+                  const result = originalMethods[methodName](...args);
+                  this.recordDiscreteEvent('3d_animation_play');
+                  return result;
+                };
+                break;
+                
+              case 'pauseAnimation':
+                viewer[methodName] = (...args) => {
+                  const result = originalMethods[methodName](...args);
+                  this.recordDiscreteEvent('3d_animation_pause');
+                  return result;
+                };
+                break;
+                
+              case 'stopAnimation':
+                viewer[methodName] = (...args) => {
+                  const result = originalMethods[methodName](...args);
+                  this.recordDiscreteEvent('3d_animation_stop');
+                  return result;
+                };
+                break;
+                
+              case 'setAnimationSpeed':
+                viewer[methodName] = (speed) => {
+                  const result = originalMethods[methodName](speed);
+                  this.recordDiscreteEvent('3d_animation_speed', { 
+                    speed 
                   });
                   return result;
                 };
@@ -280,7 +335,25 @@ export class RecordingManager {
         slice: this.viewer3D.sliceAmount || 1,
         xray: this.viewer3D.xrayAmount || 1,
         focusedPart: this.viewer3D.currentlyFocusedPart?.name || null,
-        currentModel: this.getCurrentModelInfo()
+        currentModel: this.getCurrentModelInfo(),
+        
+        // Animation state
+        animation: {
+          selectedAnimation: this.getCurrentAnimationName(),
+          isPlaying: this.getAnimationPlayingState(),
+          isPaused: this.getAnimationPausedState(),
+          speed: this.getAnimationSpeed(),
+          time: this.getAnimationTime()
+        },
+        
+        // Object visibility state (for isolation)
+        objectVisibility: this.getObjectVisibilityState(),
+        
+        // Previous camera state (for back navigation)
+        previousCameraState: this.viewer3D.previousCameraState ? {
+          position: this.viewer3D.previousCameraState.position?.toArray(),
+          target: this.viewer3D.previousCameraState.target?.toArray()
+        } : null
       };
     }
 
@@ -314,6 +387,51 @@ export class RecordingManager {
       };
     }
     return null;
+  }
+
+  getCurrentAnimationName() {
+    if (!this.viewer3D?.currentAction) return null;
+    
+    // Find the animation name from the current action
+    const animations = this.viewer3D.animations || [];
+    for (const anim of animations) {
+      const action = this.viewer3D.mixer?.clipAction(anim);
+      if (action === this.viewer3D.currentAction) {
+        return anim.name;
+      }
+    }
+    return null;
+  }
+
+  getAnimationPlayingState() {
+    if (!this.viewer3D?.currentAction) return false;
+    return this.viewer3D.currentAction.isRunning() && !this.viewer3D.currentAction.paused;
+  }
+
+  getAnimationPausedState() {
+    if (!this.viewer3D?.currentAction) return false;
+    return this.viewer3D.currentAction.paused;
+  }
+
+  getAnimationSpeed() {
+    if (!this.viewer3D?.currentAction) return 1.0;
+    return this.viewer3D.currentAction.getEffectiveTimeScale();
+  }
+
+  getAnimationTime() {
+    if (!this.viewer3D?.currentAction) return 0;
+    return this.viewer3D.currentAction.time;
+  }
+
+  getObjectVisibilityState() {
+    if (!this.viewer3D?.parts) return {};
+    
+    const visibility = {};
+    this.viewer3D.parts.forEach((part, index) => {
+      const partName = part.name || `part_${index}`;
+      visibility[partName] = part.visible;
+    });
+    return visibility;
   }
 
   startContinuousStateTracking() {
@@ -620,6 +738,40 @@ export class RecordingManager {
         this.updateUIControl('sliceSlider', state.viewer3D.slice);
         this.updateUIControl('xraySlider', state.viewer3D.xray);
       }
+      
+      // Apply animation state (no interpolation needed - discrete state)
+      if (state.viewer3D.animation) {
+        await this.restoreAnimationState(state.viewer3D.animation);
+      }
+      
+      // Apply object visibility state (for isolation)
+      if (state.viewer3D.objectVisibility) {
+        this.restoreObjectVisibility(state.viewer3D.objectVisibility);
+      }
+      
+      // Restore focused part state
+      if (state.viewer3D.focusedPart !== null) {
+        // Update the viewer's focused part reference
+        this.viewer3D.currentlyFocusedPart = this.findPartByName(state.viewer3D.focusedPart);
+        
+        // Show/hide back button based on focus state
+        const backButton = document.getElementById('backButtonOverlay');
+        if (backButton) {
+          if (state.viewer3D.focusedPart) {
+            backButton.classList.add('visible');
+          } else {
+            backButton.classList.remove('visible');
+          }
+        }
+      }
+      
+      // Restore previous camera state for proper back navigation
+      if (state.viewer3D.previousCameraState && state.viewer3D.previousCameraState.position) {
+        this.viewer3D.previousCameraState = {
+          position: new THREE.Vector3().fromArray(state.viewer3D.previousCameraState.position),
+          target: new THREE.Vector3().fromArray(state.viewer3D.previousCameraState.target)
+        };
+      }
     }
     
     // Apply content viewer state (usually discrete, no interpolation needed)
@@ -682,9 +834,95 @@ export class RecordingManager {
           }
           break;
           
+        case '3d_reset':
+          if (this.viewer3D) {
+            // Temporarily disable recording to avoid recursive calls
+            const wasRecording = this.recordingState === 'recording';
+            if (wasRecording) {
+              this.recordingState = 'playback';
+            }
+            
+            this.viewer3D.reset?.();
+            
+            if (wasRecording) {
+              this.recordingState = 'recording';
+            }
+          }
+          break;
+          
         case '3d_model_load':
           if (this.viewer3D && eventState.data.modelUrl) {
             await this.loadModel(eventState.data.modelUrl, eventState.data.modelName);
+          }
+          break;
+          
+        case '3d_animation_select':
+          if (this.viewer3D && eventState.data.animationName) {
+            await this.selectAnimationByName(eventState.data.animationName);
+          }
+          break;
+          
+        case '3d_animation_play':
+          if (this.viewer3D?.currentAction) {
+            // Temporarily disable recording to avoid recursive calls
+            const wasRecording = this.recordingState === 'recording';
+            if (wasRecording) {
+              this.recordingState = 'playback';
+            }
+            
+            this.viewer3D.playAnimation?.();
+            
+            if (wasRecording) {
+              this.recordingState = 'recording';
+            }
+          }
+          break;
+          
+        case '3d_animation_pause':
+          if (this.viewer3D?.currentAction) {
+            // Temporarily disable recording to avoid recursive calls
+            const wasRecording = this.recordingState === 'recording';
+            if (wasRecording) {
+              this.recordingState = 'playback';
+            }
+            
+            this.viewer3D.pauseAnimation?.();
+            
+            if (wasRecording) {
+              this.recordingState = 'recording';
+            }
+          }
+          break;
+          
+        case '3d_animation_stop':
+          if (this.viewer3D?.currentAction) {
+            // Temporarily disable recording to avoid recursive calls
+            const wasRecording = this.recordingState === 'recording';
+            if (wasRecording) {
+              this.recordingState = 'playback';
+            }
+            
+            this.viewer3D.stopAnimation?.();
+            
+            if (wasRecording) {
+              this.recordingState = 'recording';
+            }
+          }
+          break;
+          
+        case '3d_animation_speed':
+          if (this.viewer3D?.currentAction && eventState.data.speed) {
+            // Temporarily disable recording to avoid recursive calls
+            const wasRecording = this.recordingState === 'recording';
+            if (wasRecording) {
+              this.recordingState = 'playback';
+            }
+            
+            this.viewer3D.setAnimationSpeed?.(eventState.data.speed);
+            
+            if (wasRecording) {
+              this.recordingState = 'recording';
+            }
           }
           break;
           
@@ -791,6 +1029,46 @@ export class RecordingManager {
       this.updateUIControl('explodeSlider', state.viewer3D.explode || 0);
       this.updateUIControl('sliceSlider', state.viewer3D.slice || 1);
       this.updateUIControl('xraySlider', state.viewer3D.xray || 1);
+      
+      // Restore animation state
+      if (state.viewer3D.animation) {
+        await this.restoreAnimationState(state.viewer3D.animation);
+      }
+      
+      // Restore object visibility state (for isolation)
+      if (state.viewer3D.objectVisibility) {
+        this.restoreObjectVisibility(state.viewer3D.objectVisibility);
+      }
+      
+      // Restore focused part state
+      if (state.viewer3D.focusedPart) {
+        this.viewer3D.currentlyFocusedPart = this.findPartByName(state.viewer3D.focusedPart);
+        
+        // Show back button if focusing on a part
+        const backButton = document.getElementById('backButtonOverlay');
+        if (backButton) {
+          backButton.classList.add('visible');
+        }
+      } else {
+        // Clear focused part state
+        this.viewer3D.currentlyFocusedPart = null;
+        
+        // Hide back button
+        const backButton = document.getElementById('backButtonOverlay');
+        if (backButton) {
+          backButton.classList.remove('visible');
+        }
+      }
+      
+      // Restore previous camera state for proper back navigation
+      if (state.viewer3D.previousCameraState && state.viewer3D.previousCameraState.position) {
+        this.viewer3D.previousCameraState = {
+          position: new THREE.Vector3().fromArray(state.viewer3D.previousCameraState.position),
+          target: new THREE.Vector3().fromArray(state.viewer3D.previousCameraState.target)
+        };
+      } else {
+        this.viewer3D.previousCameraState = { position: null, target: null };
+      }
     }
     
     // Restore content viewer state
@@ -943,5 +1221,85 @@ export class RecordingManager {
       this.updateButtonStates();
       console.log(`Recording loaded: recording_${name}`);
     }
+  }
+
+  async restoreAnimationState(animationState) {
+    if (!this.viewer3D || !animationState) return;
+    
+    // Select animation if there's one specified
+    if (animationState.selectedAnimation) {
+      await this.selectAnimationByName(animationState.selectedAnimation);
+    }
+    
+    // Restore animation playback state
+    if (this.viewer3D.currentAction && animationState.selectedAnimation) {
+      // Set animation time
+      if (typeof animationState.time === 'number') {
+        this.viewer3D.currentAction.time = animationState.time;
+      }
+      
+      // Set animation speed
+      if (typeof animationState.speed === 'number') {
+        this.viewer3D.currentAction.setEffectiveTimeScale(animationState.speed);
+        this.updateUIControl('animationSpeed', animationState.speed);
+      }
+      
+      // Set play/pause state
+      if (animationState.isPlaying) {
+        this.viewer3D.currentAction.paused = false;
+        this.viewer3D.currentAction.play();
+      } else if (animationState.isPaused) {
+        this.viewer3D.currentAction.paused = true;
+      } else {
+        // Stopped
+        this.viewer3D.currentAction.stop();
+      }
+      
+      // Update animation UI
+      this.viewer3D.updateAnimationButtons?.();
+    }
+  }
+
+  async selectAnimationByName(animationName) {
+    if (!this.viewer3D || !animationName) return;
+    
+    // Update the animation select dropdown
+    const animationSelect = document.getElementById('animationSelect');
+    if (animationSelect) {
+      animationSelect.value = animationName;
+    }
+    
+    // Call the actual select method (but avoid triggering our override)
+    if (this.viewer3D.selectAnimation) {
+      // Temporarily disable recording to avoid recursive calls
+      const wasRecording = this.recordingState === 'recording';
+      if (wasRecording) {
+        this.recordingState = 'playback';
+      }
+      
+      this.viewer3D.selectAnimation(animationName);
+      
+      if (wasRecording) {
+        this.recordingState = 'recording';
+      }
+    }
+  }
+
+  restoreObjectVisibility(visibilityState) {
+    if (!this.viewer3D?.parts || !visibilityState) return;
+    
+    // Restore visibility for each part
+    this.viewer3D.parts.forEach((part, index) => {
+      const partName = part.name || `part_${index}`;
+      if (partName in visibilityState) {
+        part.visible = visibilityState[partName];
+      }
+    });
+  }
+
+  findPartByName(partName) {
+    if (!this.viewer3D?.parts || !partName) return null;
+    
+    return this.viewer3D.parts.find(part => part.name === partName) || null;
   }
 } 
