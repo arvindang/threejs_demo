@@ -195,7 +195,8 @@ class Viewer3D {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xf8f9fa);
     
-    this.camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+    // Increase far clipping plane to prevent model disappearing when zooming out
+    this.camera = new THREE.PerspectiveCamera(35, 1, 0.01, 10000);
     this.camera.position.set(3, 2, 6);
     
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -332,14 +333,8 @@ class Viewer3D {
         // Center the model at origin
         this.model.position.sub(center);
         
-        // Position camera based on model size
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const distance = maxDim * 2.5; // Give some breathing room
-        
-        this.camera.position.set(distance, distance * 0.7, distance);
-        this.camera.lookAt(0, 0, 0);
-        this.controls.target.set(0, 0, 0);
-        this.controls.update();
+        // Fit model to available pane width
+        this.fitModelToPane();
         
         this.parts = [];
         this.model.traverse((obj) => {
@@ -384,6 +379,50 @@ class Viewer3D {
         this.showEmptyState();
       }
     );
+  }
+
+  fitModelToPane() {
+    if (!this.model) return;
+    
+    // Get current container dimensions
+    const rect = this.container.getBoundingClientRect();
+    const containerWidth = rect.width;
+    const containerHeight = rect.height;
+    
+    // Calculate model bounds
+    const box = new THREE.Box3().setFromObject(this.model);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    
+    // Calculate distance based on container aspect ratio and model size
+    const aspectRatio = containerWidth / containerHeight;
+    const fov = this.camera.fov * (Math.PI / 180);
+    
+    // Base distance calculation for fitting model in view
+    let distance = maxDim / (2 * Math.tan(fov / 2));
+    
+    // Adjust distance based on aspect ratio to ensure good fit
+    if (aspectRatio < 1) {
+      // Taller container - increase distance slightly
+      distance *= 1.2;
+    } else {
+      // Wider container - can be closer
+      distance *= 0.9;
+    }
+    
+    // Add some breathing room but cap the distance to reasonable values
+    distance *= 1.5;
+    
+    // Ensure distance is within reasonable bounds to avoid clipping issues
+    distance = Math.max(maxDim * 0.5, Math.min(distance, maxDim * 20));
+    
+    // Position camera at optimal viewing angle
+    this.camera.position.set(distance * 0.8, distance * 0.5, distance * 0.8);
+    this.camera.lookAt(0, 0, 0);
+    this.controls.target.set(0, 0, 0);
+    this.controls.update();
+    
+    console.log(`   - Fitted to pane: ${containerWidth}x${containerHeight}, distance: ${distance.toFixed(2)}, maxDim: ${maxDim.toFixed(2)}`);
   }
 
   clearModel() {
@@ -525,6 +564,11 @@ class Viewer3D {
     this.goBackToFullView(false);
     this.controls.reset();
     
+    // Refit model to current pane size
+    if (this.model) {
+      this.fitModelToPane();
+    }
+    
     // Reset slider values in the HTML
     const explodeSlider = document.getElementById('explodeSlider');
     const sliceSlider = document.getElementById('sliceSlider');
@@ -537,6 +581,11 @@ class Viewer3D {
     this.camera.aspect = rect.width / rect.height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(rect.width, rect.height);
+    
+    // Refit model to new pane size if model is loaded
+    if (this.model && !this.currentlyFocusedPart) {
+      this.fitModelToPane();
+    }
   }
 
   animate() {
@@ -941,5 +990,38 @@ document.getElementById('btnBack').addEventListener('click', () => {
 
 // Initially hide back button
 document.getElementById('btnBack').style.display = 'none';
+
+// Monitor drawer state changes for automatic model refitting
+function setupDrawerResizeObserver() {
+  // Monitor the 3D viewer container for size changes
+  if (window.ResizeObserver) {
+    const resizeObserver = new ResizeObserver(entries => {
+      for (let entry of entries) {
+        if (entry.target.id === 'viewer3D') {
+          // Debounce resize calls to avoid excessive refitting
+          clearTimeout(viewer3D.resizeTimeout);
+          viewer3D.resizeTimeout = setTimeout(() => {
+            viewer3D.onResize();
+          }, 100);
+        }
+      }
+    });
+    
+    resizeObserver.observe(document.getElementById('viewer3D'));
+  } else {
+    // Fallback for browsers without ResizeObserver
+    // Monitor drawer toggle clicks manually
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('.drawer-toggle')) {
+        setTimeout(() => {
+          viewer3D.onResize();
+        }, 300); // Wait for CSS transition to complete
+      }
+    });
+  }
+}
+
+// Initialize drawer resize monitoring
+setupDrawerResizeObserver();
 
 console.log('Interactive 3D Learning Platform initialized');
