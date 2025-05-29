@@ -387,6 +387,8 @@ class Viewer3D {
   }
 
   setupClipping() {
+    // Default to Y-axis slicing (existing behavior)
+    this.sliceDirection = 'y';
     this.clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
     this.renderer.clippingPlanes = [this.clipPlane];
     this.renderer.localClippingEnabled = true;
@@ -397,6 +399,7 @@ class Viewer3D {
     this.params = {
       explode: 0,
       slice: 1,
+      sliceDirection: 'y',
       reset: () => this.reset()
     };
 
@@ -422,6 +425,19 @@ class Viewer3D {
         this.updateSlice();
       });
     }
+
+    // Connect slice direction radio buttons
+    const sliceDirectionInputs = document.querySelectorAll('input[name="sliceDirection"]');
+    sliceDirectionInputs.forEach(input => {
+      input.addEventListener('change', (e) => {
+        if (e.target.checked) {
+          this.params.sliceDirection = e.target.value;
+          this.sliceDirection = e.target.value;
+          this.updateSliceDirection();
+          this.updateSlice();
+        }
+      });
+    });
 
     // Connect reset button
     const resetBtn = document.getElementById('resetViewBtn');
@@ -626,6 +642,7 @@ class Viewer3D {
         this.removeTestCube();
         
         // Initialize slice to show whole object
+        this.updateSliceDirection();
         this.updateSlice();
         
         console.log(`✅ Successfully loaded model: ${name}`);
@@ -699,6 +716,7 @@ class Viewer3D {
         this.removeTestCube();
         
         // Initialize slice to show whole object
+        this.updateSliceDirection();
         this.updateSlice();
         
         console.log(`✅ Successfully loaded GLTF model: ${name}`);
@@ -786,6 +804,25 @@ class Viewer3D {
     document.getElementById('viewer3DEmpty').style.display = 'none';
   }
 
+  updateSliceDirection() {
+    // Update the clipping plane normal vector based on selected direction
+    switch (this.sliceDirection) {
+      case 'x':
+        this.clipPlane.normal.set(-1, 0, 0); // Slice along X axis (left to right)
+        break;
+      case 'y':
+        this.clipPlane.normal.set(0, -1, 0); // Slice along Y axis (bottom to top)
+        break;
+      case 'z':
+        this.clipPlane.normal.set(0, 0, -1); // Slice along Z axis (front to back)
+        break;
+      default:
+        this.clipPlane.normal.set(0, -1, 0); // Default to Y axis
+    }
+    
+    console.log(`Slice direction changed to: ${this.sliceDirection.toUpperCase()}-axis`);
+  }
+
   updateSlice() {
     if (!this.model) {
       this.clipPlane.constant = 1000; // Show everything when no model
@@ -795,15 +832,33 @@ class Viewer3D {
     // Calculate model bounds to determine clipping range
     const box = new THREE.Box3().setFromObject(this.model);
     const modelSize = box.getSize(new THREE.Vector3());
-    const minY = box.min.y;
-    const maxY = box.max.y;
+    
+    // Get min/max values based on current slice direction
+    let minValue, maxValue;
+    switch (this.sliceDirection) {
+      case 'x':
+        minValue = box.min.x;
+        maxValue = box.max.x;
+        break;
+      case 'y':
+        minValue = box.min.y;
+        maxValue = box.max.y;
+        break;
+      case 'z':
+        minValue = box.min.z;
+        maxValue = box.max.z;
+        break;
+      default:
+        minValue = box.min.y;
+        maxValue = box.max.y;
+    }
     
     // Map slider value 0-1 to clipping range
-    // slice = 0: clip everything (constant = minY - buffer) 
-    // slice = 1: show everything (constant = maxY + buffer)
-    const buffer = modelSize.y * 0.1; // Small buffer to ensure full visibility
-    const clippingRange = (maxY + buffer) - (minY - buffer);
-    this.clipPlane.constant = (minY - buffer) + (this.params.slice * clippingRange);
+    // slice = 0: clip everything (constant = minValue - buffer) 
+    // slice = 1: show everything (constant = maxValue + buffer)
+    const buffer = Math.max(modelSize.x, modelSize.y, modelSize.z) * 0.1; // Buffer based on largest dimension
+    const clippingRange = (maxValue + buffer) - (minValue - buffer);
+    this.clipPlane.constant = (minValue - buffer) + (this.params.slice * clippingRange);
   }
 
   calculateExplosionDirections() {
@@ -972,6 +1027,11 @@ class Viewer3D {
   reset() {
     this.params.explode = 0;
     this.params.slice = 1;
+    this.params.sliceDirection = 'y';
+    this.sliceDirection = 'y';
+    
+    // Reset slice direction to Y-axis
+    this.updateSliceDirection();
     this.updateSlice();
     this.explode(0);
     this.goBackToFullView(false);
@@ -982,11 +1042,14 @@ class Viewer3D {
       this.fitModelToPane();
     }
     
-    // Reset slider values in the HTML
+    // Reset slider values and radio buttons in the HTML
     const explodeSlider = document.getElementById('explodeSlider');
     const sliceSlider = document.getElementById('sliceSlider');
+    const sliceYRadio = document.getElementById('sliceY');
+    
     if (explodeSlider) explodeSlider.value = 0;
     if (sliceSlider) sliceSlider.value = 1;
+    if (sliceYRadio) sliceYRadio.checked = true;
   }
 
   onResize() {

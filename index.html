@@ -115,7 +115,22 @@
           
           <div class="control-item">
             <label class="form-label">Slice:</label>
-            <input type="range" id="sliceSlider" class="form-range" min="0" max="1" step="0.01" value="1">
+            <div class="d-flex align-items-center gap-2">
+              <!-- Slice Direction Toggle -->
+              <div class="btn-group btn-group-sm" role="group" aria-label="Slice direction">
+                <input type="radio" class="btn-check" name="sliceDirection" id="sliceX" value="x">
+                <label class="btn btn-outline-secondary" for="sliceX" title="Slice along X axis">X</label>
+                
+                <input type="radio" class="btn-check" name="sliceDirection" id="sliceY" value="y" checked>
+                <label class="btn btn-outline-secondary" for="sliceY" title="Slice along Y axis">Y</label>
+                
+                <input type="radio" class="btn-check" name="sliceDirection" id="sliceZ" value="z">
+                <label class="btn btn-outline-secondary" for="sliceZ" title="Slice along Z axis">Z</label>
+              </div>
+              
+              <!-- Slice Position Slider -->
+              <input type="range" id="sliceSlider" class="form-range" min="0" max="1" step="0.01" value="1" style="flex: 1;">
+            </div>
           </div>
         </div>
         
