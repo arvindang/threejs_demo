@@ -29,37 +29,146 @@
   </script>
 
   <style>
-    .pane-container {
-      height: calc(100vh - 200px);
-      min-height: 500px;
+    /* Main layout structure */
+    .main-container {
+      height: calc(100vh - 80px); /* Account for header */
+      display: flex;
+      flex-direction: row;
+      overflow: hidden;
     }
     
-    .asset-drawer {
-      width: 250px;
+    /* Drawer styles */
+    .sidebar-drawer {
+      width: 280px;
       background: #f8f9fa;
       border-right: 1px solid #dee2e6;
-      transition: margin-left 0.3s ease;
+      transition: width 0.3s ease, margin-left 0.3s ease;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
     }
     
-    .asset-drawer.collapsed {
-      margin-left: -250px;
+    .sidebar-drawer.collapsed {
+      width: 0;
+      margin-left: 0;
+      border-right: none;
+      overflow: hidden;
     }
     
-    .asset-drawer-toggle {
+    .sidebar-drawer.right {
+      border-right: none;
+      border-left: 1px solid #dee2e6;
+    }
+    
+    .sidebar-drawer.right.collapsed {
+      border-left: none;
+    }
+    
+    /* Drawer content */
+    .drawer-content {
+      padding: 1rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 280px;
+    }
+    
+    /* Toggle buttons */
+    .drawer-toggle {
       position: absolute;
-      right: -40px;
       top: 50%;
       transform: translateY(-50%);
       z-index: 10;
-      width: 40px;
-      height: 80px;
-      border-radius: 0 8px 8px 0;
+      width: 32px;
+      height: 60px;
+      padding: 0;
+      border-radius: 0;
+      border: 1px solid #dee2e6;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     
+    .drawer-toggle.left {
+      right: -32px;
+      border-left: none;
+      border-radius: 0 6px 6px 0;
+    }
+    
+    .drawer-toggle.right {
+      left: -32px;
+      border-right: none;
+      border-radius: 6px 0 0 6px;
+    }
+    
+    .drawer-toggle:hover {
+      background: #f8f9fa;
+    }
+    
+    /* Main content panes */
+    .content-pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 300px;
+      background: white;
+      border: 1px solid #dee2e6;
+      margin: 0 8px;
+    }
+    
+    .content-pane:first-child {
+      margin-left: 0;
+    }
+    
+    .content-pane:last-child {
+      margin-right: 0;
+    }
+    
+    /* 3D Viewer specific styles */
+    .viewer-3d-pane {
+      background: #f8f9fa;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .viewer-3d-content {
+      flex: 1;
+      position: relative;
+    }
+    
+    .viewer-3d-controls {
+      background: rgba(255, 255, 255, 0.95);
+      border-bottom: 1px solid #dee2e6;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    /* Content viewer styles */
+    .content-viewer-pane {
+      background: white;
+      overflow: hidden;
+    }
+    
+    .content-viewer-content {
+      flex: 1;
+      position: relative;
+      overflow: auto;
+    }
+    
+    .content-navigation {
+      background: #f8f9fa;
+      border-bottom: 1px solid #dee2e6;
+      padding: 0.5rem 1rem;
+    }
+    
+    /* Drop zones */
     .drop-zone {
       border: 2px dashed #dee2e6;
       border-radius: 8px;
-      padding: 2rem;
+      padding: 1.5rem;
       text-align: center;
       transition: all 0.3s ease;
       background: #f8f9fa;
@@ -76,9 +185,19 @@
       background: #d1e7dd;
     }
     
+    /* Asset lists */
+    .asset-list {
+      flex: 1;
+      margin-bottom: 1rem;
+      overflow-y: auto;
+    }
+    
     .asset-item {
       cursor: pointer;
       transition: background-color 0.2s ease;
+      padding: 0.5rem;
+      border-radius: 4px;
+      margin-bottom: 0.25rem;
     }
     
     .asset-item:hover {
@@ -90,29 +209,25 @@
       color: white;
     }
     
-    .content-viewer {
-      background: white;
-      border: 1px solid #dee2e6;
-      border-radius: 8px;
-      overflow: hidden;
+    /* Empty states */
+    .empty-state {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: #6c757d;
     }
     
-    .viewer-3d {
-      background: #f8f9fa;
-      border: 1px solid #dee2e6;
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    
+    /* PDF canvas */
     #pdf-canvas {
       max-width: 100%;
       height: auto;
     }
     
-    .content-navigation {
-      background: #f8f9fa;
-      border-bottom: 1px solid #dee2e6;
-      padding: 0.5rem 1rem;
+    /* Hide elements */
+    .d-none {
+      display: none !important;
     }
   </style>
 </head>
@@ -151,160 +266,165 @@
     </div>
   </header>
 
-  <!-- Main Content -->
-  <main class="container-fluid p-3">
-    <div class="row pane-container">
+  <!-- Main Content Container -->
+  <main class="main-container">
+    
+    <!-- 3D Models Drawer (Left) -->
+    <div id="modelsDrawer" class="sidebar-drawer position-relative">
+      <button class="drawer-toggle left" onclick="toggleDrawer('modelsDrawer')">
+        <i class="bi bi-chevron-left"></i>
+      </button>
       
-      <!-- Left Pane: 3D Viewer -->
-      <div class="col-md-6 d-flex">
-        <!-- 3D Models Drawer -->
-        <div id="modelsDrawer" class="asset-drawer position-relative">
-          <button class="asset-drawer-toggle btn btn-primary btn-sm" onclick="toggleDrawer('modelsDrawer')">
-            <i class="bi bi-chevron-right"></i>
-          </button>
-          
-          <div class="p-3 h-100 d-flex flex-column">
-            <h6 class="mb-3">
-              <i class="bi bi-box me-2"></i>3D Models
-            </h6>
-            
-            <!-- 3D Models List -->
-            <div id="modelsList" class="flex-grow-1 mb-3">
-              <div class="text-muted small text-center py-3">
-                No models uploaded yet
-              </div>
-            </div>
-            
-            <!-- Upload Zone for 3D Models -->
-            <div id="modelsDropZone" class="drop-zone">
-              <i class="bi bi-cloud-upload fs-1 text-muted mb-2"></i>
-              <p class="mb-2">Drop 3D models here</p>
-              <small class="text-muted">GLB, GLTF files</small>
-              <input type="file" id="modelsFileInput" accept=".glb,.gltf" multiple style="display: none;">
-              <div class="mt-2">
-                <button class="btn btn-outline-primary btn-sm" onclick="document.getElementById('modelsFileInput').click()">
-                  Browse Files
-                </button>
-              </div>
-            </div>
+      <div class="drawer-content">
+        <h6 class="mb-3">
+          <i class="bi bi-box me-2"></i>3D Models
+        </h6>
+        
+        <!-- 3D Models List -->
+        <div id="modelsList" class="asset-list">
+          <div class="text-muted small text-center py-3">
+            No models uploaded yet
           </div>
         </div>
         
-        <!-- 3D Viewer -->
-        <div class="flex-grow-1 ms-3">
-          <div class="viewer-3d h-100 position-relative">
-            <div id="viewer3D" class="w-100 h-100"></div>
-            
-            <!-- Back button for focused view -->
-            <button id="btnBack" class="btn btn-outline-secondary btn-sm position-absolute" style="top: 10px; left: 10px; z-index: 10; display: none;">
-              <i class="bi bi-arrow-left me-1"></i>Back to Full View
+        <!-- Upload Zone for 3D Models -->
+        <div id="modelsDropZone" class="drop-zone">
+          <i class="bi bi-cloud-upload fs-4 text-muted mb-2"></i>
+          <p class="mb-2 small">Drop 3D models here</p>
+          <small class="text-muted">GLB, GLTF files</small>
+          <input type="file" id="modelsFileInput" accept=".glb,.gltf" multiple style="display: none;">
+          <div class="mt-2">
+            <button class="btn btn-outline-primary btn-sm" onclick="document.getElementById('modelsFileInput').click()">
+              Browse Files
             </button>
-            
-            <!-- Empty state for 3D viewer -->
-            <div id="viewer3DEmpty" class="position-absolute top-50 start-50 translate-middle text-center">
-              <i class="bi bi-cube fs-1 text-muted mb-3"></i>
-              <h5 class="text-muted">No 3D Model Loaded</h5>
-              <p class="text-muted">Upload a 3D model to get started</p>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Right Pane: Content Viewer -->
-      <div class="col-md-6 d-flex">
-        <!-- Content Assets Drawer -->
-        <div id="contentDrawer" class="asset-drawer position-relative">
-          <button class="asset-drawer-toggle btn btn-primary btn-sm" onclick="toggleDrawer('contentDrawer')">
-            <i class="bi bi-chevron-right"></i>
-          </button>
-          
-          <div class="p-3 h-100 d-flex flex-column">
-            <h6 class="mb-3">
-              <i class="bi bi-file-earmark me-2"></i>Content Assets
-            </h6>
-            
-            <!-- Content Assets List -->
-            <div id="contentList" class="flex-grow-1 mb-3">
-              <div class="text-muted small text-center py-3">
-                No content uploaded yet
-              </div>
-            </div>
-            
-            <!-- Upload Zone for Content -->
-            <div id="contentDropZone" class="drop-zone">
-              <i class="bi bi-cloud-upload fs-1 text-muted mb-2"></i>
-              <p class="mb-2">Drop content here</p>
-              <small class="text-muted">PDF, PNG, JPG files</small>
-              <input type="file" id="contentFileInput" accept=".pdf,.png,.jpg,.jpeg" multiple style="display: none;">
-              <div class="mt-2">
-                <button class="btn btn-outline-primary btn-sm" onclick="document.getElementById('contentFileInput').click()">
-                  Browse Files
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Content Viewer -->
-        <div class="flex-grow-1 ms-3">
-          <div class="content-viewer h-100 d-flex flex-column">
-            <!-- Content Navigation -->
-            <div id="contentNavigation" class="content-navigation d-none">
-              <div class="d-flex align-items-center justify-content-between">
-                <div class="d-flex align-items-center gap-2">
-                  <button id="prevPage" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-chevron-left"></i>
-                  </button>
-                  <span id="pageInfo" class="small text-muted">Page 1 of 1</span>
-                  <button id="nextPage" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-chevron-right"></i>
-                  </button>
-                </div>
-                <div class="d-flex align-items-center gap-2">
-                  <button id="zoomOut" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-zoom-out"></i>
-                  </button>
-                  <span id="zoomLevel" class="small text-muted">100%</span>
-                  <button id="zoomIn" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-zoom-in"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Content Display Area -->
-            <div class="flex-grow-1 position-relative overflow-auto">
-              <!-- Empty state for content viewer -->
-              <div id="contentViewerEmpty" class="position-absolute top-50 start-50 translate-middle text-center">
-                <i class="bi bi-file-earmark fs-1 text-muted mb-3"></i>
-                <h5 class="text-muted">No Content Loaded</h5>
-                <p class="text-muted">Upload content to view alongside your 3D model</p>
-              </div>
-              
-              <!-- PDF Viewer -->
-              <div id="pdfViewer" class="d-none h-100 d-flex align-items-center justify-content-center">
-                <canvas id="pdfCanvas"></canvas>
-              </div>
-              
-              <!-- Image Viewer -->
-              <div id="imageViewer" class="d-none h-100 d-flex align-items-center justify-content-center">
-                <img id="imageDisplay" class="img-fluid" style="max-height: 100%; object-fit: contain;">
-              </div>
-              
-              <!-- Unsupported File Viewer -->
-              <div id="unsupportedViewer" class="d-none h-100 d-flex align-items-center justify-content-center">
-                <div class="text-center">
-                  <i class="bi bi-file-x fs-1 text-muted mb-3"></i>
-                  <h5 class="text-muted">File Not Supported</h5>
-                  <p class="text-muted">This file type is not currently supported for viewing</p>
-                  <small class="text-muted">Supported formats: PDF, PNG, JPG</small>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
     </div>
+    
+    <!-- 3D Viewer Pane (Center-Left) -->
+    <div class="content-pane viewer-3d-pane">
+      <!-- 3D Controls Bar -->
+      <div class="viewer-3d-controls">
+        <label class="form-label mb-0 me-2">Explode:</label>
+        <input type="range" id="explodeSlider" class="form-range" min="0" max="1" step="0.01" value="0" style="width: 100px;">
+        
+        <label class="form-label mb-0 me-2 ms-3">Slice:</label>
+        <input type="range" id="sliceSlider" class="form-range" min="-1" max="1" step="0.01" value="0" style="width: 100px;">
+        
+        <button id="resetViewBtn" class="btn btn-outline-secondary btn-sm ms-3">
+          <i class="bi bi-arrow-clockwise me-1"></i>Reset View
+        </button>
+        
+        <!-- Back button for focused view -->
+        <button id="btnBack" class="btn btn-outline-secondary btn-sm ms-auto" style="display: none;">
+          <i class="bi bi-arrow-left me-1"></i>Back to Full View
+        </button>
+      </div>
+      
+      <!-- 3D Viewer Content -->
+      <div class="viewer-3d-content">
+        <div id="viewer3D" class="w-100 h-100"></div>
+        
+        <!-- Empty state for 3D viewer -->
+        <div id="viewer3DEmpty" class="empty-state">
+          <i class="bi bi-cube fs-1 mb-3"></i>
+          <h5>No 3D Model Loaded</h5>
+          <p class="text-muted">Upload a 3D model to get started</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Content Viewer Pane (Center-Right) -->
+    <div class="content-pane content-viewer-pane">
+      <!-- Content Navigation -->
+      <div id="contentNavigation" class="content-navigation d-none">
+        <div class="d-flex align-items-center justify-content-between">
+          <div class="d-flex align-items-center gap-2">
+            <button id="prevPage" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-chevron-left"></i>
+            </button>
+            <span id="pageInfo" class="small text-muted">Page 1 of 1</span>
+            <button id="nextPage" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-chevron-right"></i>
+            </button>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <button id="zoomOut" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-zoom-out"></i>
+            </button>
+            <span id="zoomLevel" class="small text-muted">100%</span>
+            <button id="zoomIn" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-zoom-in"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Content Display Area -->
+      <div class="content-viewer-content">
+        <!-- Empty state for content viewer -->
+        <div id="contentViewerEmpty" class="empty-state">
+          <i class="bi bi-file-earmark fs-1 mb-3"></i>
+          <h5>No Content Loaded</h5>
+          <p class="text-muted">Upload content to view alongside your 3D model</p>
+        </div>
+        
+        <!-- PDF Viewer -->
+        <div id="pdfViewer" class="d-none h-100 d-flex align-items-center justify-content-center">
+          <canvas id="pdfCanvas"></canvas>
+        </div>
+        
+        <!-- Image Viewer -->
+        <div id="imageViewer" class="d-none h-100 d-flex align-items-center justify-content-center">
+          <img id="imageDisplay" class="img-fluid" style="max-height: 100%; object-fit: contain;">
+        </div>
+        
+        <!-- Unsupported File Viewer -->
+        <div id="unsupportedViewer" class="d-none h-100 d-flex align-items-center justify-content-center">
+          <div class="text-center">
+            <i class="bi bi-file-x fs-1 text-muted mb-3"></i>
+            <h5 class="text-muted">File Not Supported</h5>
+            <p class="text-muted">This file type is not currently supported for viewing</p>
+            <small class="text-muted">Supported formats: PDF, PNG, JPG</small>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Content Assets Drawer (Right) -->
+    <div id="contentDrawer" class="sidebar-drawer right position-relative">
+      <button class="drawer-toggle right" onclick="toggleDrawer('contentDrawer')">
+        <i class="bi bi-chevron-right"></i>
+      </button>
+      
+      <div class="drawer-content">
+        <h6 class="mb-3">
+          <i class="bi bi-file-earmark me-2"></i>Content Assets
+        </h6>
+        
+        <!-- Content Assets List -->
+        <div id="contentList" class="asset-list">
+          <div class="text-muted small text-center py-3">
+            No content uploaded yet
+          </div>
+        </div>
+        
+        <!-- Upload Zone for Content -->
+        <div id="contentDropZone" class="drop-zone">
+          <i class="bi bi-cloud-upload fs-4 text-muted mb-2"></i>
+          <p class="mb-2 small">Drop content here</p>
+          <small class="text-muted">PDF, PNG, JPG files</small>
+          <input type="file" id="contentFileInput" accept=".pdf,.png,.jpg,.jpeg" multiple style="display: none;">
+          <div class="mt-2">
+            <button class="btn btn-outline-primary btn-sm" onclick="document.getElementById('contentFileInput').click()">
+              Browse Files
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
   </main>
 
   <!-- Load the external viewer script -->
@@ -314,14 +434,18 @@
     // Drawer toggle functionality
     function toggleDrawer(drawerId) {
       const drawer = document.getElementById(drawerId);
-      const toggle = drawer.querySelector('.asset-drawer-toggle i');
+      const toggle = drawer.querySelector('.drawer-toggle i');
       
       drawer.classList.toggle('collapsed');
       
-      if (drawer.classList.contains('collapsed')) {
-        toggle.className = 'bi bi-chevron-right';
+      // Update toggle icon based on drawer position and state
+      const isRight = drawer.classList.contains('right');
+      const isCollapsed = drawer.classList.contains('collapsed');
+      
+      if (isRight) {
+        toggle.className = isCollapsed ? 'bi bi-chevron-left' : 'bi bi-chevron-right';
       } else {
-        toggle.className = 'bi bi-chevron-left';
+        toggle.className = isCollapsed ? 'bi bi-chevron-right' : 'bi bi-chevron-left';
       }
     }
   </script>

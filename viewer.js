@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { GUI } from 'https://cdn.jsdelivr.net/npm/lil-gui@0.19.2/+esm';
 import { gsap } from "https://cdn.jsdelivr.net/npm/gsap@3.12.5/+esm";
 
 /* ---------- Asset Management ---------- */
@@ -227,23 +226,6 @@ class Viewer3D {
     this.animate();
   }
 
-  addTestCube() {
-    const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-    const material = new THREE.MeshStandardMaterial({ color: 0x00ff00, transparent: true, opacity: 0.3 });
-    this.testCube = new THREE.Mesh(geometry, material);
-    this.testCube.position.set(0, 0, 0);
-    this.scene.add(this.testCube);
-    console.log('🟢 Test cube added to verify 3D rendering');
-  }
-
-  removeTestCube() {
-    if (this.testCube) {
-      this.scene.remove(this.testCube);
-      this.testCube = null;
-      console.log('🟢 Test cube removed');
-    }
-  }
-
   setupLighting() {
     // Ambient light
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
@@ -274,37 +256,54 @@ class Viewer3D {
   }
 
   setupGUI() {
+    // Controls parameters
     this.params = {
       explode: 0,
-      slice: 1,
+      slice: 0,
       reset: () => this.reset()
     };
 
-    this.gui = new GUI({ 
-      title: '3D Controls',
-      container: this.container,
-      width: 250
-    });
-    
-    this.explodeController = this.gui.add(this.params, 'explode', 0, 1, 0.01)
-       .name('Explode View')
-       .onChange((value) => this.explode(value));
-       
-    this.sliceController = this.gui.add(this.params, 'slice', -1, 1, 0.01)
-       .name('Slice View')
-       .onChange((value) => {
-         this.clipPlane.constant = value;
-       });
-       
-    this.gui.add(this.params, 'reset').name('Reset View');
+    // Connect HTML controls instead of lil-gui
+    this.setupHTMLControls();
+  }
 
-    // Style GUI
-    this.gui.domElement.style.position = 'absolute';
-    this.gui.domElement.style.top = '10px';
-    this.gui.domElement.style.right = '10px';
-    this.gui.domElement.style.backgroundColor = 'rgba(5, 5, 5, 0.8)';
-    this.gui.domElement.style.borderRadius = '5px';
-    this.gui.domElement.style.padding = '5px';
+  setupHTMLControls() {
+    // Connect explode slider
+    const explodeSlider = document.getElementById('explodeSlider');
+    if (explodeSlider) {
+      explodeSlider.addEventListener('input', (e) => {
+        this.params.explode = parseFloat(e.target.value);
+        this.explode(this.params.explode);
+      });
+    }
+
+    // Connect slice slider  
+    const sliceSlider = document.getElementById('sliceSlider');
+    if (sliceSlider) {
+      sliceSlider.addEventListener('input', (e) => {
+        this.params.slice = parseFloat(e.target.value);
+        this.clipPlane.constant = this.params.slice;
+      });
+    }
+
+    // Connect reset button
+    const resetBtn = document.getElementById('resetViewBtn');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        this.reset();
+        // Reset slider values
+        if (explodeSlider) explodeSlider.value = 0;
+        if (sliceSlider) sliceSlider.value = 0;
+      });
+    }
+
+    // Connect back button
+    const backBtn = document.getElementById('btnBack');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        this.goBackToFullView();
+      });
+    }
   }
 
   setupRaycasting() {
@@ -368,6 +367,7 @@ class Viewer3D {
         
         this.hideEmptyState();
         this.removeTestCube();
+        
         console.log(`✅ Successfully loaded model: ${name}`);
         console.log(`   - Parts found: ${this.parts.length}`);
         console.log(`   - Model size: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}`);
@@ -519,12 +519,17 @@ class Viewer3D {
 
   reset() {
     this.params.explode = 0;
-    this.params.slice = 1;
-    this.clipPlane.constant = 1;
+    this.params.slice = 0;
+    this.clipPlane.constant = 0;
     this.explode(0);
     this.goBackToFullView(false);
     this.controls.reset();
-    this.gui.refresh();
+    
+    // Reset slider values in the HTML
+    const explodeSlider = document.getElementById('explodeSlider');
+    const sliceSlider = document.getElementById('sliceSlider');
+    if (explodeSlider) explodeSlider.value = 0;
+    if (sliceSlider) sliceSlider.value = 0;
   }
 
   onResize() {
@@ -538,6 +543,23 @@ class Viewer3D {
     requestAnimationFrame(() => this.animate());
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
+  }
+
+  addTestCube() {
+    const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+    const material = new THREE.MeshStandardMaterial({ color: 0x00ff00, transparent: true, opacity: 0.3 });
+    this.testCube = new THREE.Mesh(geometry, material);
+    this.testCube.position.set(0, 0, 0);
+    this.scene.add(this.testCube);
+    console.log('🟢 Test cube added to verify 3D rendering');
+  }
+
+  removeTestCube() {
+    if (this.testCube) {
+      this.scene.remove(this.testCube);
+      this.testCube = null;
+      console.log('🟢 Test cube removed');
+    }
   }
 }
 
@@ -901,8 +923,9 @@ const contentViewer = new ContentViewer();
 const dragDropHandler = new DragDropHandler();
 const recordingManager = new RecordingManager();
 
-// Make assetManager globally accessible for any remaining references
+// Make instances globally accessible for debugging and drawer resize functionality
 window.assetManager = assetManager;
+window.viewer3D = viewer3D;
 
 // Load default 3D model after initialization
 setTimeout(() => {
