@@ -446,8 +446,131 @@ class Viewer3D {
   setupRaycasting() {
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
+    this.mouseDownPosition = new THREE.Vector2();
+    this.isMouseDown = false;
+    this.hoveredPart = null;
+    this.originalMaterials = new Map(); // Store original materials for hover effect
     
-    this.renderer.domElement.addEventListener('click', (event) => this.onCanvasClick(event));
+    // Mouse/touch events for better click detection
+    this.renderer.domElement.addEventListener('mousedown', (event) => this.onMouseDown(event));
+    this.renderer.domElement.addEventListener('mouseup', (event) => this.onMouseUp(event));
+    this.renderer.domElement.addEventListener('mousemove', (event) => this.onMouseMove(event));
+    this.renderer.domElement.addEventListener('mouseleave', () => this.onMouseLeave());
+  }
+
+  onMouseDown(event) {
+    this.isMouseDown = true;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.mouseDownPosition.x = event.clientX - rect.left;
+    this.mouseDownPosition.y = event.clientY - rect.top;
+  }
+
+  onMouseUp(event) {
+    if (!this.isMouseDown) return;
+    this.isMouseDown = false;
+    
+    // Calculate how much the mouse moved during the click
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const mouseUpPosition = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
+    };
+    
+    const moveDistance = Math.sqrt(
+      Math.pow(mouseUpPosition.x - this.mouseDownPosition.x, 2) + 
+      Math.pow(mouseUpPosition.y - this.mouseDownPosition.y, 2)
+    );
+    
+    // Only register as a click if mouse moved less than 5 pixels (threshold for distinguishing click vs drag)
+    const clickThreshold = 5;
+    if (moveDistance < clickThreshold) {
+      this.handleClick(event);
+    }
+  }
+
+  onMouseMove(event) {
+    if (!this.model || this.isMouseDown) return;
+    
+    // Update mouse position for raycasting
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    // Perform raycasting for hover effects
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const intersects = this.raycaster.intersectObjects(this.parts);
+
+    // Clear previous hover
+    this.clearHover();
+
+    if (intersects.length > 0) {
+      const hoveredMesh = intersects[0].object;
+      this.setHover(hoveredMesh);
+    }
+  }
+
+  onMouseLeave() {
+    this.clearHover();
+  }
+
+  setHover(mesh) {
+    if (this.hoveredPart === mesh || this.currentlyFocusedPart === mesh) return;
+    
+    this.hoveredPart = mesh;
+    
+    // Store original material if not already stored
+    if (!this.originalMaterials.has(mesh)) {
+      this.originalMaterials.set(mesh, mesh.material);
+    }
+    
+    // Create hover material
+    const originalMaterial = this.originalMaterials.get(mesh);
+    const hoverMaterial = originalMaterial.clone();
+    
+    // Make it slightly brighter and add emissive glow
+    if (hoverMaterial.color) {
+      hoverMaterial.emissive.setHex(0x222222); // Subtle glow
+    }
+    hoverMaterial.transparent = true;
+    hoverMaterial.opacity = 0.8;
+    
+    mesh.material = hoverMaterial;
+    
+    // Change cursor to pointer
+    this.renderer.domElement.style.cursor = 'pointer';
+  }
+
+  clearHover() {
+    if (this.hoveredPart && this.originalMaterials.has(this.hoveredPart)) {
+      // Restore original material
+      this.hoveredPart.material = this.originalMaterials.get(this.hoveredPart);
+      this.hoveredPart = null;
+    }
+    
+    // Reset cursor
+    this.renderer.domElement.style.cursor = 'default';
+  }
+
+  handleClick(event) {
+    if (!this.model) return;
+    
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const intersects = this.raycaster.intersectObjects(this.parts);
+
+    if (intersects.length > 0) {
+      // Clicked on a part
+      const selectedMesh = intersects[0].object;
+      this.focusOnPart(selectedMesh);
+    } else {
+      // Clicked on empty space - deselect current part
+      if (this.currentlyFocusedPart) {
+        this.goBackToFullView();
+      }
+    }
   }
 
   loadModel(url, name) {
@@ -641,11 +764,16 @@ class Viewer3D {
   }
 
   clearModel() {
+    // Clear hover state first
+    this.clearHover();
+    
     if (this.model) {
       this.scene.remove(this.model);
       this.model = null;
       this.parts = [];
       this.currentlyFocusedPart = null;
+      this.hoveredPart = null;
+      this.originalMaterials.clear(); // Clear material references
       this.showEmptyState();
     }
   }
@@ -754,27 +882,14 @@ class Viewer3D {
     });
   }
 
-  onCanvasClick(event) {
-    if (!this.model) return;
-    
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    this.raycaster.setFromCamera(this.mouse, this.camera);
-    const intersects = this.raycaster.intersectObjects(this.parts);
-
-    if (intersects.length > 0) {
-      const selectedMesh = intersects[0].object;
-      this.focusOnPart(selectedMesh);
-    }
-  }
-
   focusOnPart(selectedMesh) {
     if (this.currentlyFocusedPart === selectedMesh) {
       this.goBackToFullView();
       return;
     }
+
+    // Clear any hover state
+    this.clearHover();
 
     // Store current camera state
     this.previousCameraState.position = this.camera.position.clone();
@@ -814,14 +929,20 @@ class Viewer3D {
 
     this.currentlyFocusedPart = selectedMesh;
     document.getElementById('backButtonOverlay').classList.add('visible');
+    
+    console.log(`Focused on part: ${selectedMesh.name || 'Unnamed part'}`);
   }
 
   goBackToFullView(animate = true) {
     if (!this.currentlyFocusedPart) return;
 
-    // Show all parts
+    // Show all parts and restore their original materials
     this.parts.forEach(part => {
       part.visible = true;
+      // Restore original material if it was stored for hover effects
+      if (this.originalMaterials.has(part)) {
+        part.material = this.originalMaterials.get(part);
+      }
     });
 
     if (animate && this.previousCameraState.position) {
@@ -844,6 +965,8 @@ class Viewer3D {
 
     this.currentlyFocusedPart = null;
     document.getElementById('backButtonOverlay').classList.remove('visible');
+    
+    console.log('Returned to full view');
   }
 
   reset() {
