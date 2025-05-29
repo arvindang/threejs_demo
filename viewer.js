@@ -813,7 +813,7 @@ class Viewer3D {
     });
 
     this.currentlyFocusedPart = selectedMesh;
-    document.getElementById('btnBack').style.display = 'inline-block';
+    document.getElementById('backButtonOverlay').classList.add('visible');
   }
 
   goBackToFullView(animate = true) {
@@ -843,7 +843,7 @@ class Viewer3D {
     }
 
     this.currentlyFocusedPart = null;
-    document.getElementById('btnBack').style.display = 'none';
+    document.getElementById('backButtonOverlay').classList.remove('visible');
   }
 
   reset() {
@@ -1345,7 +1345,7 @@ document.getElementById('btnBack').addEventListener('click', () => {
 });
 
 // Initially hide back button
-document.getElementById('btnBack').style.display = 'none';
+document.getElementById('backButtonOverlay').classList.remove('visible');
 
 // Monitor drawer state changes for automatic model refitting
 function setupDrawerResizeObserver() {

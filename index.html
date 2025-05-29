@@ -164,14 +164,29 @@
       padding: 0.75rem 1rem;
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      justify-content: space-between;
+      gap: 1rem;
       flex-wrap: wrap;
       min-height: 60px;
       overflow: visible;
     }
     
+    .controls-group {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    
+    .control-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      white-space: nowrap;
+    }
+    
     .viewer-3d-controls .form-range {
-      min-width: 80px;
+      width: 100px;
       flex-shrink: 0;
     }
     
@@ -183,6 +198,26 @@
     .viewer-3d-controls .form-label {
       flex-shrink: 0;
       white-space: nowrap;
+      margin-bottom: 0;
+      font-weight: 500;
+    }
+    
+    /* Back button - positioned as overlay */
+    .back-button-overlay {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 20;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: all 0.3s ease;
+      pointer-events: none;
+    }
+    
+    .back-button-overlay.visible {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
     }
     
     /* Content viewer styles */
@@ -311,10 +346,14 @@
         gap: 0.75rem;
       }
       
-      .viewer-3d-controls .d-flex {
-        justify-content: space-between;
-        flex-wrap: wrap;
+      .controls-group {
+        flex-direction: column;
         gap: 0.5rem;
+        align-items: stretch;
+      }
+      
+      .control-item {
+        justify-content: space-between;
       }
       
       .viewer-3d-controls .form-range {
@@ -323,12 +362,17 @@
       }
       
       .viewer-3d-controls .form-label {
-        font-size: 0.875rem;
+        font-size: 0.8rem;
       }
       
       .viewer-3d-controls .btn-sm {
         font-size: 0.8rem;
         padding: 0.25rem 0.5rem;
+      }
+      
+      .back-button-overlay {
+        top: 5px;
+        left: 5px;
       }
     }
     
@@ -445,27 +489,35 @@
     <div class="content-pane viewer-3d-pane">
       <!-- 3D Controls Bar -->
       <div class="viewer-3d-controls">
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-          <label class="form-label mb-0 me-1">Explode:</label>
-          <input type="range" id="explodeSlider" class="form-range" min="0" max="1" step="0.01" value="0" style="width: 80px;">
+        <div class="controls-group">
+          <div class="control-item">
+            <label class="form-label">Explode:</label>
+            <input type="range" id="explodeSlider" class="form-range" min="0" max="1" step="0.01" value="0">
+          </div>
           
-          <label class="form-label mb-0 me-1 ms-2">Slice:</label>
-          <input type="range" id="sliceSlider" class="form-range" min="0" max="1" step="0.01" value="1" style="width: 80px;">
-          
-          <button id="resetViewBtn" class="btn btn-outline-secondary btn-sm ms-2">
+          <div class="control-item">
+            <label class="form-label">Slice:</label>
+            <input type="range" id="sliceSlider" class="form-range" min="0" max="1" step="0.01" value="1">
+          </div>
+        </div>
+        
+        <div class="controls-group">
+          <button id="resetViewBtn" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-arrow-clockwise me-1"></i>Reset
           </button>
         </div>
-        
-        <!-- Back button for focused view -->
-        <button id="btnBack" class="btn btn-outline-secondary btn-sm ms-auto" style="display: none;">
-          <i class="bi bi-arrow-left me-1"></i>Back to Full View
-        </button>
       </div>
       
       <!-- 3D Viewer Content -->
       <div class="viewer-3d-content">
         <div id="viewer3D" class="w-100 h-100"></div>
+        
+        <!-- Back button overlay -->
+        <div id="backButtonOverlay" class="back-button-overlay">
+          <button id="btnBack" class="btn btn-primary btn-sm shadow">
+            <i class="bi bi-arrow-left me-1"></i>Back to Full View
+          </button>
+        </div>
         
         <!-- Empty state for 3D viewer -->
         <div id="viewer3DEmpty" class="empty-state">
