@@ -1,6 +1,6 @@
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as THREE from 'https://unpkg.com/three@0.164.0/build/three.module.js';
+import { OrbitControls } from 'https://unpkg.com/three@0.164.0/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'https://unpkg.com/three@0.164.0/examples/jsm/loaders/GLTFLoader.js';
 import { gsap } from "https://cdn.jsdelivr.net/npm/gsap@3.12.5/+esm";
 
 /* ---------- Asset Management ---------- */
@@ -13,19 +13,24 @@ class AssetManager {
   }
 
   addModel(file, id = null) {
+    console.log('AssetManager.addModel called with:', file.name);
     const modelId = id || `model_${Date.now()}`;
     const url = URL.createObjectURL(file);
     
-    this.models3D.set(modelId, {
+    const modelData = {
       id: modelId,
       name: file.name,
       file: file,
       url: url,
       type: file.type,
       size: file.size
-    });
+    };
+    
+    this.models3D.set(modelId, modelData);
+    console.log('Model stored in AssetManager:', modelId, this.models3D.size, 'total models');
     
     this.updateModelsUI();
+    console.log('UI updated for models');
     return modelId;
   }
 
@@ -91,15 +96,24 @@ class AssetManager {
   }
 
   updateModelsUI() {
+    console.log('updateModelsUI called, models count:', this.models3D.size);
     const modelsList = document.getElementById('modelsList');
     
+    if (!modelsList) {
+      console.error('modelsList element not found!');
+      return;
+    }
+    
     if (this.models3D.size === 0) {
+      console.log('No models to display, showing empty state');
       modelsList.innerHTML = '<div class="text-muted small text-center py-3">No models uploaded yet</div>';
       return;
     }
 
+    console.log('Building UI for', this.models3D.size, 'models');
     modelsList.innerHTML = '';
     this.models3D.forEach((model, id) => {
+      console.log('Creating UI for model:', id, model.name);
       const item = document.createElement('div');
       item.className = `asset-item p-2 mb-2 rounded border ${this.currentModel === id ? 'active' : ''}`;
       item.innerHTML = `
@@ -125,7 +139,9 @@ class AssetManager {
       });
       
       modelsList.appendChild(item);
+      console.log('Model UI item added to DOM');
     });
+    console.log('updateModelsUI completed');
   }
 
   updateContentUI() {
@@ -837,21 +853,37 @@ class DragDropHandler {
   }
 
   handleModelFiles(files) {
+    console.log('handleModelFiles called with:', files.length, 'files');
     files.forEach(file => {
-      const modelId = assetManager.addModel(file);
-      // Auto-load the first model if none is currently loaded
-      if (!assetManager.currentModel) {
-        assetManager.loadModel(modelId);
+      console.log('Processing model file:', file.name, file.type, file.size);
+      try {
+        const modelId = assetManager.addModel(file);
+        console.log('Added model with ID:', modelId);
+        // Auto-load the first model if none is currently loaded
+        if (!assetManager.currentModel) {
+          console.log('Auto-loading model:', modelId);
+          assetManager.loadModel(modelId);
+        }
+      } catch (error) {
+        console.error('Error handling model file:', error);
       }
     });
   }
 
   handleContentFiles(files) {
+    console.log('handleContentFiles called with:', files.length, 'files');
     files.forEach(file => {
-      const contentId = assetManager.addContent(file);
-      // Auto-load the first content if none is currently loaded
-      if (!assetManager.currentContent) {
-        assetManager.loadContent(contentId);
+      console.log('Processing content file:', file.name, file.type, file.size);
+      try {
+        const contentId = assetManager.addContent(file);
+        console.log('Added content with ID:', contentId);
+        // Auto-load the first content if none is currently loaded
+        if (!assetManager.currentContent) {
+          console.log('Auto-loading content:', contentId);
+          assetManager.loadContent(contentId);
+        }
+      } catch (error) {
+        console.error('Error handling content file:', error);
       }
     });
   }
@@ -976,12 +1008,9 @@ const recordingManager = new RecordingManager();
 window.assetManager = assetManager;
 window.viewer3D = viewer3D;
 
-// Load default 3D model after initialization
-setTimeout(() => {
-  const defaultModelUrl = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/GearboxAssy/glTF-Binary/GearboxAssy.glb';
-  console.log('Loading default gearbox model...');
-  viewer3D.loadModel(defaultModelUrl, 'Sample Gearbox Assembly');
-}, 100);
+// Remove direct model loading - let users upload their own models
+// This was bypassing the AssetManager system and not showing in the drawer
+console.log('Interactive 3D Learning Platform initialized - ready for file uploads');
 
 // Back button functionality
 document.getElementById('btnBack').addEventListener('click', () => {
