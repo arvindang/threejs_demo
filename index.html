@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Lesson · Gearbox Assembly</title>
+  <title>Interactive 3D Learning Platform</title>
 
   <!-- Bootstrap 5 & icons -->
   <link
@@ -11,8 +11,12 @@
     integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
     crossorigin="anonymous"
   />
+  
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 
-  <!-- three.js libraries - removed in favor of module imports -->
+  <!-- PDF.js -->
+  <script src="https://unpkg.com/pdfjs-dist@latest/build/pdf.min.mjs" type="module"></script>
   
   <!-- Import maps to help resolve module names -->
   <script type="importmap">
@@ -23,103 +27,303 @@
       }
     }
   </script>
+
+  <style>
+    .pane-container {
+      height: calc(100vh - 200px);
+      min-height: 500px;
+    }
+    
+    .asset-drawer {
+      width: 250px;
+      background: #f8f9fa;
+      border-right: 1px solid #dee2e6;
+      transition: margin-left 0.3s ease;
+    }
+    
+    .asset-drawer.collapsed {
+      margin-left: -250px;
+    }
+    
+    .asset-drawer-toggle {
+      position: absolute;
+      right: -40px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 10;
+      width: 40px;
+      height: 80px;
+      border-radius: 0 8px 8px 0;
+    }
+    
+    .drop-zone {
+      border: 2px dashed #dee2e6;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      transition: all 0.3s ease;
+      background: #f8f9fa;
+    }
+    
+    .drop-zone.drag-over {
+      border-color: #0d6efd;
+      background: #e7f3ff;
+    }
+    
+    .drop-zone.has-content {
+      border-style: solid;
+      border-color: #198754;
+      background: #d1e7dd;
+    }
+    
+    .asset-item {
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+    
+    .asset-item:hover {
+      background-color: #e9ecef;
+    }
+    
+    .asset-item.active {
+      background-color: #0d6efd;
+      color: white;
+    }
+    
+    .content-viewer {
+      background: white;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    .viewer-3d {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    #pdf-canvas {
+      max-width: 100%;
+      height: auto;
+    }
+    
+    .content-navigation {
+      background: #f8f9fa;
+      border-bottom: 1px solid #dee2e6;
+      padding: 0.5rem 1rem;
+    }
+  </style>
 </head>
 <body class="bg-light">
 
-  <!-- Lesson header -->
-  <section class="container py-4">
-    <h1 class="mb-0">Gearbox Fundamentals</h1>
-    <p class="text-muted">Author · Arvin Dang</p>
-    <p>
-      In this lesson we examine the main components of a simple gearbox,
-      exploring how torque is transferred through each stage.
-    </p>
-  </section>
-
-  <!-- Card + viewer -->
-  <div class="container pb-5">
-    <div class="card shadow-sm">
-      <div class="card-header d-flex align-items-center gap-3">
-        <div class="d-flex flex-wrap align-items-center gap-3 w-100">
-          <!-- Reset button -->
-          <!-- <button id="btnReset" class="btn btn-sm btn-outline-secondary">
-            Reset
-          </button> -->
-          <!-- Back button (initially hidden) -->
-          <button id="btnBack" class="btn btn-sm btn-outline-secondary">
-            Back to Full View
-          </button>
-
-          <!-- Explode slider -->
-          <!-- <div class="d-flex align-items-center gap-2 flex-grow-1">
-            <label for="explode" class="mb-0 me-2">Explode</label>
-            <input id="explode" type="range" min="0" max="1" step="0.01" value="0" class="form-range flex-grow-1" />
-          </div> -->
-
-          <!-- Slice slider -->
-          <!-- <div class="d-flex align-items-center gap-2 flex-grow-1">
-            <label for="slice" class="mb-0 me-2">Slice</label>
-            <input id="slice" type="range" min="-1" max="1" step="0.01" value="1" class="form-range flex-grow-1" />
-          </div> -->
-
-          <!-- Animation controls -->
-          <!-- <div class="d-flex align-items-center gap-2 flex-grow-1">
-            <label for="animate" class="mb-0 me-2">Animate</label>
-            <select id="animate" class="form-select form-select-sm" style="width: 120px;">
-              <option value="none">None</option>
-              <option value="rotate">Rotate</option>
-              <option value="drive">Drive</option>
-            </select>
-            <input id="animSpeed" type="range" min="0.1" max="2" step="0.1" value="1" class="form-range flex-grow-1 ms-2" />
-          </div> -->
+  <!-- Header -->
+  <header class="bg-white shadow-sm">
+    <div class="container-fluid py-3">
+      <div class="row align-items-center">
+        <div class="col">
+          <h1 class="h4 mb-0">Interactive 3D Learning Platform</h1>
+          <small class="text-muted">Create synchronized lessons with 3D models and content</small>
         </div>
-      </div>
-
-      <div class="card-body p-0">
-        <!-- Viewer canvas will be inserted into this div -->
-        <div id="viewer" style="width:100%;height:60vh"></div>
-      </div>
-
-      <div class="card-footer">
-        <div class="d-flex align-items-center gap-3">
+        <div class="col-auto">
           <!-- Recording controls -->
-          <button id="btnRecord" class="btn btn-danger rounded-circle d-flex align-items-center justify-content-center" title="Record" style="width: 38px; height: 38px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-record-circle" viewBox="0 0 16 16">
-              <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
-              <path d="M11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
-            </svg>
-          </button>
-          <button id="btnStop" class="btn btn-secondary rounded-circle d-flex align-items-center justify-content-center" title="Stop" disabled style="width: 38px; height: 38px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-stop-fill" viewBox="0 0 16 16">
-              <path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z"/>
-            </svg>
-          </button>
-          
-          <button id="btnPlay" class="btn btn-primary d-flex align-items-center justify-content-center" title="Play" disabled style="width: 38px; height: 38px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-play-fill" viewBox="0 0 16 16">
-              <path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
-            </svg>
-          </button>
-          
-          <button id="btnPause" class="btn btn-secondary d-flex align-items-center justify-content-center" title="Pause" disabled style="width: 38px; height: 38px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-pause-fill" viewBox="0 0 16 16">
-              <path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5zm5 0A1.5 1.5 0 0 1 12 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5z"/>
-            </svg>
-          </button>
-          
-          <!-- Progress bar -->
-          <div class="progress flex-grow-1">
-            <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+          <div class="d-flex align-items-center gap-2">
+            <button id="btnRecord" class="btn btn-danger btn-sm rounded-circle d-flex align-items-center justify-content-center" title="Record" style="width: 36px; height: 36px;">
+              <i class="bi bi-record-circle"></i>
+            </button>
+            <button id="btnStop" class="btn btn-secondary btn-sm rounded-circle d-flex align-items-center justify-content-center" title="Stop" disabled style="width: 36px; height: 36px;">
+              <i class="bi bi-stop-fill"></i>
+            </button>
+            <button id="btnPlay" class="btn btn-primary btn-sm d-flex align-items-center justify-content-center" title="Play" disabled style="width: 36px; height: 36px;">
+              <i class="bi bi-play-fill"></i>
+            </button>
+            <button id="btnPause" class="btn btn-secondary btn-sm d-flex align-items-center justify-content-center" title="Pause" disabled style="width: 36px; height: 36px;">
+              <i class="bi bi-pause-fill"></i>
+            </button>
+            <div class="progress" style="width: 150px; height: 8px;">
+              <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <span id="timeDisplay" class="text-muted small">00:00</span>
           </div>
-          
-          <!-- Time display -->
-          <span id="timeDisplay" class="text-muted">00:00</span>
         </div>
       </div>
     </div>
-  </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container-fluid p-3">
+    <div class="row pane-container">
+      
+      <!-- Left Pane: 3D Viewer -->
+      <div class="col-md-6 d-flex">
+        <!-- 3D Models Drawer -->
+        <div id="modelsDrawer" class="asset-drawer position-relative">
+          <button class="asset-drawer-toggle btn btn-primary btn-sm" onclick="toggleDrawer('modelsDrawer')">
+            <i class="bi bi-chevron-right"></i>
+          </button>
+          
+          <div class="p-3 h-100 d-flex flex-column">
+            <h6 class="mb-3">
+              <i class="bi bi-box me-2"></i>3D Models
+            </h6>
+            
+            <!-- 3D Models List -->
+            <div id="modelsList" class="flex-grow-1 mb-3">
+              <div class="text-muted small text-center py-3">
+                No models uploaded yet
+              </div>
+            </div>
+            
+            <!-- Upload Zone for 3D Models -->
+            <div id="modelsDropZone" class="drop-zone">
+              <i class="bi bi-cloud-upload fs-1 text-muted mb-2"></i>
+              <p class="mb-2">Drop 3D models here</p>
+              <small class="text-muted">GLB, GLTF files</small>
+              <input type="file" id="modelsFileInput" accept=".glb,.gltf" multiple style="display: none;">
+              <div class="mt-2">
+                <button class="btn btn-outline-primary btn-sm" onclick="document.getElementById('modelsFileInput').click()">
+                  Browse Files
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 3D Viewer -->
+        <div class="flex-grow-1 ms-3">
+          <div class="viewer-3d h-100 position-relative">
+            <div id="viewer3D" class="w-100 h-100"></div>
+            
+            <!-- Back button for focused view -->
+            <button id="btnBack" class="btn btn-outline-secondary btn-sm position-absolute" style="top: 10px; left: 10px; z-index: 10; display: none;">
+              <i class="bi bi-arrow-left me-1"></i>Back to Full View
+            </button>
+            
+            <!-- Empty state for 3D viewer -->
+            <div id="viewer3DEmpty" class="position-absolute top-50 start-50 translate-middle text-center">
+              <i class="bi bi-cube fs-1 text-muted mb-3"></i>
+              <h5 class="text-muted">No 3D Model Loaded</h5>
+              <p class="text-muted">Upload a 3D model to get started</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Right Pane: Content Viewer -->
+      <div class="col-md-6 d-flex">
+        <!-- Content Assets Drawer -->
+        <div id="contentDrawer" class="asset-drawer position-relative">
+          <button class="asset-drawer-toggle btn btn-primary btn-sm" onclick="toggleDrawer('contentDrawer')">
+            <i class="bi bi-chevron-right"></i>
+          </button>
+          
+          <div class="p-3 h-100 d-flex flex-column">
+            <h6 class="mb-3">
+              <i class="bi bi-file-earmark me-2"></i>Content Assets
+            </h6>
+            
+            <!-- Content Assets List -->
+            <div id="contentList" class="flex-grow-1 mb-3">
+              <div class="text-muted small text-center py-3">
+                No content uploaded yet
+              </div>
+            </div>
+            
+            <!-- Upload Zone for Content -->
+            <div id="contentDropZone" class="drop-zone">
+              <i class="bi bi-cloud-upload fs-1 text-muted mb-2"></i>
+              <p class="mb-2">Drop content here</p>
+              <small class="text-muted">PDF, PNG, JPG files</small>
+              <input type="file" id="contentFileInput" accept=".pdf,.png,.jpg,.jpeg" multiple style="display: none;">
+              <div class="mt-2">
+                <button class="btn btn-outline-primary btn-sm" onclick="document.getElementById('contentFileInput').click()">
+                  Browse Files
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Content Viewer -->
+        <div class="flex-grow-1 ms-3">
+          <div class="content-viewer h-100 d-flex flex-column">
+            <!-- Content Navigation -->
+            <div id="contentNavigation" class="content-navigation d-none">
+              <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2">
+                  <button id="prevPage" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-chevron-left"></i>
+                  </button>
+                  <span id="pageInfo" class="small text-muted">Page 1 of 1</span>
+                  <button id="nextPage" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-chevron-right"></i>
+                  </button>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                  <button id="zoomOut" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-zoom-out"></i>
+                  </button>
+                  <span id="zoomLevel" class="small text-muted">100%</span>
+                  <button id="zoomIn" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-zoom-in"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Content Display Area -->
+            <div class="flex-grow-1 position-relative overflow-auto">
+              <!-- Empty state for content viewer -->
+              <div id="contentViewerEmpty" class="position-absolute top-50 start-50 translate-middle text-center">
+                <i class="bi bi-file-earmark fs-1 text-muted mb-3"></i>
+                <h5 class="text-muted">No Content Loaded</h5>
+                <p class="text-muted">Upload content to view alongside your 3D model</p>
+              </div>
+              
+              <!-- PDF Viewer -->
+              <div id="pdfViewer" class="d-none h-100 d-flex align-items-center justify-content-center">
+                <canvas id="pdfCanvas"></canvas>
+              </div>
+              
+              <!-- Image Viewer -->
+              <div id="imageViewer" class="d-none h-100 d-flex align-items-center justify-content-center">
+                <img id="imageDisplay" class="img-fluid" style="max-height: 100%; object-fit: contain;">
+              </div>
+              
+              <!-- Unsupported File Viewer -->
+              <div id="unsupportedViewer" class="d-none h-100 d-flex align-items-center justify-content-center">
+                <div class="text-center">
+                  <i class="bi bi-file-x fs-1 text-muted mb-3"></i>
+                  <h5 class="text-muted">File Not Supported</h5>
+                  <p class="text-muted">This file type is not currently supported for viewing</p>
+                  <small class="text-muted">Supported formats: PDF, PNG, JPG</small>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
 
   <!-- Load the external viewer script -->
   <script type="module" src="viewer.js"></script>
+  
+  <script>
+    // Drawer toggle functionality
+    function toggleDrawer(drawerId) {
+      const drawer = document.getElementById(drawerId);
+      const toggle = drawer.querySelector('.asset-drawer-toggle i');
+      
+      drawer.classList.toggle('collapsed');
+      
+      if (drawer.classList.contains('collapsed')) {
+        toggle.className = 'bi bi-chevron-right';
+      } else {
+        toggle.className = 'bi bi-chevron-left';
+      }
+    }
+  </script>
 </body>
 </html>
