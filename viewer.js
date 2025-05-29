@@ -404,14 +404,14 @@ class Viewer3D {
     // Adjust distance based on aspect ratio to ensure good fit
     if (aspectRatio < 1) {
       // Taller container - increase distance slightly
-      distance *= 1.2;
+      distance *= 1.1;
     } else {
       // Wider container - can be closer
-      distance *= 0.9;
+      distance *= 0.85;
     }
     
-    // Add some breathing room but cap the distance to reasonable values
-    distance *= 1.5;
+    // Add minimal breathing room to make object take more space in pane
+    distance *= 1.15;
     
     // Ensure distance is within reasonable bounds to avoid clipping issues
     distance = Math.max(maxDim * 0.5, Math.min(distance, maxDim * 20));
