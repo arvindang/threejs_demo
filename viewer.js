@@ -387,7 +387,7 @@ class Viewer3D {
   }
 
   setupClipping() {
-    this.clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 1);
+    this.clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
     this.renderer.clippingPlanes = [this.clipPlane];
     this.renderer.localClippingEnabled = true;
   }
