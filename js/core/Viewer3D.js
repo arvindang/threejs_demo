@@ -88,6 +88,7 @@ export class Viewer3D {
       explode: 0,
       slice: 1,
       sliceDirection: 'y',
+      xray: 1, // 1 = fully opaque, 0 = fully transparent
       reset: () => this.reset()
     };
 
@@ -1151,6 +1152,9 @@ export class Viewer3D {
   setXrayMode(transparency) {
     if (!this.model) return;
     
+    // Update the params to track current xray value
+    this.params.xray = transparency;
+    
     this.parts.forEach(part => {
       if (part.material) {
         // Store original opacity if not already stored
@@ -1273,5 +1277,60 @@ export class Viewer3D {
     // Show the modal
     const bsModal = new bootstrap.Modal(modal);
     bsModal.show();
+  }
+
+  // Recording system support methods
+  setExplodeAmount(amount) {
+    this.params.explode = amount;
+    this.explode(amount);
+    // Update UI to reflect the change
+    const explodeSlider = document.getElementById('explodeSlider');
+    const explodeValue = document.getElementById('explodeValue');
+    if (explodeSlider) explodeSlider.value = amount;
+    if (explodeValue) explodeValue.textContent = Math.round(amount * 100) + '%';
+  }
+
+  setSliceAmount(amount) {
+    this.params.slice = amount;
+    this.updateSlice();
+    // Update UI to reflect the change
+    const sliceSlider = document.getElementById('sliceSlider');
+    const sliceValue = document.getElementById('sliceValue');
+    if (sliceSlider) sliceSlider.value = amount;
+    if (sliceValue) sliceValue.textContent = Math.round(amount * 100) + '%';
+  }
+
+  setXRayAmount(amount) {
+    this.setXrayMode(amount);
+    // Update UI to reflect the change
+    const xraySlider = document.getElementById('xraySlider');
+    const xrayValue = document.getElementById('xrayValue');
+    if (xraySlider) xraySlider.value = amount;
+    if (xrayValue) xrayValue.textContent = Math.round(amount * 100) + '%';
+  }
+
+  focusOnPartByName(objectName) {
+    // Find the mesh by name and focus on it
+    const targetMesh = this.parts.find(part => part.name === objectName);
+    if (targetMesh) {
+      this.focusOnPart(targetMesh);
+      return true;
+    } else {
+      console.warn('Could not find part with name:', objectName);
+      return false;
+    }
+  }
+
+  // Getter methods for current state (useful for recording)
+  get explodeAmount() {
+    return this.params.explode;
+  }
+
+  get sliceAmount() {
+    return this.params.slice;
+  }
+
+  get xrayAmount() {
+    return this.params.xray;
   }
 } 

@@ -12,10 +12,14 @@ const contentViewer = new ContentViewer();
 const dragDropHandler = new DragDropHandler();
 const recordingManager = new RecordingManager();
 
+// Connect the recording manager to the viewers after initialization
+recordingManager.connect(viewer3D, contentViewer);
+
 // Make instances globally accessible for debugging and drawer resize functionality
 window.assetManager = assetManager;
 window.viewer3D = viewer3D;
 window.contentViewer = contentViewer;
+window.recordingManager = recordingManager;
 
 // Remove direct model loading - let users upload their own models
 // This was bypassing the AssetManager system and not showing in the drawer

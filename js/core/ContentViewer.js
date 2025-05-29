@@ -2,6 +2,7 @@
 export class ContentViewer {
   constructor() {
     this.currentContent = null;
+    this.currentAsset = null; // Track current asset for recording
     this.currentPage = 1;
     this.totalPages = 1;
     this.zoomLevel = 1;
@@ -42,6 +43,7 @@ export class ContentViewer {
 
   async loadContent(content) {
     this.currentContent = content;
+    this.currentAsset = content; // Set current asset for recording
     this.hideAllViewers();
     
     if (content.type.includes('pdf')) {
@@ -136,6 +138,7 @@ export class ContentViewer {
 
   clearContent() {
     this.currentContent = null;
+    this.currentAsset = null; // Clear current asset
     this.pdfDoc = null;
     this.hideAllViewers();
     this.showEmptyState();
@@ -223,5 +226,16 @@ export class ContentViewer {
       await this.renderPDFPage(this.currentPage);
       this.updateNavigation();
     }
+  }
+
+  // Recording system support methods
+  async displayAsset(asset) {
+    // Load content from asset
+    await this.loadContent(asset);
+  }
+
+  // Getter method for current scale (useful for recording)
+  get scale() {
+    return this.zoomLevel;
   }
 } 

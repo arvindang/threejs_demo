@@ -62,12 +62,9 @@ function focusOnPart(selectedMesh) {
 **Known Issues:**
 - Object selection is overly sensitive (single click isolates)
 - Camera centering on focused objects is imprecise
-- "Back to Full View" doesn't restore original position well
 
 **Recommended Fixes:**
-1. Implement double-click or hold-to-select
-2. Store original camera state more precisely
-3. Use GSAP for smooth camera transitions
+1. Implement double click to select and isolate object
 4. Add visual hover states before selection
 
 ### Recording Architecture
@@ -132,7 +129,7 @@ let recordedEvents = [
 ```
 
 ### Responsive Breakpoints
-- **Desktop**: Side-by-side panes (50/50 split)
+- **Desktop**: Side-by-side panes (50/50 split), drawers are collapsable to display and allow selection between 3D Models and Content Assets
 - **Tablet**: Stacked panes with tabs
 - **Mobile**: Single pane with swipe navigation
 
@@ -176,37 +173,13 @@ try {
 }
 ```
 
-### Performance Considerations
-1. **3D Optimization**: Use LOD, frustum culling, texture compression
-2. **File Management**: Lazy loading, progressive enhancement
-3. **Memory**: Dispose of unused geometries and textures
-4. **Recording**: Throttle state capture to reasonable intervals
-
-## 🧪 Testing Strategy
-
-### Unit Testing Priorities
-1. **File Upload/Validation**: Test various file types and sizes
-2. **3D Interactions**: Mock raycasting and selection events
-3. **Recording/Playback**: Verify state capture and restoration
-4. **Asset Management**: Test CRUD operations
-
-### Integration Testing
-1. **Cross-browser**: Chrome, Firefox, Safari, Edge
-2. **Device Testing**: Desktop, tablet, mobile
-3. **Performance**: Large models, multiple assets
-4. **Accessibility**: Screen readers, keyboard navigation
-
-### Manual Testing Scenarios
-1. **Happy Path**: Upload → Record → Playback workflow
-2. **Error Cases**: Invalid files, network issues, browser crashes
-3. **Edge Cases**: Very large models, long recordings, rapid interactions
-
 ## 🚀 Deployment Considerations
 
 ### Current Setup
 - Development server only (`node server.js`)
 - No build process or optimization
 - Static file serving
+- Keep this a simple proof of concept, it's okay to dummy content 
 
 ### Production Recommendations
 1. **Build Process**: Webpack/Vite for bundling and optimization

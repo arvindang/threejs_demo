@@ -203,6 +203,39 @@ export class AssetManager {
     }
   }
 
+  // Get asset by ID (for recording playback)
+  getAssetById(assetId) {
+    // Check 3D models first
+    const model = this.models3D.get(assetId);
+    if (model) {
+      return model;
+    }
+    
+    // Check content assets
+    const content = this.contentAssets.get(assetId);
+    if (content) {
+      return content;
+    }
+    
+    return null;
+  }
+
+  // Get currently loaded 3D asset (for recording)
+  get currentAsset3D() {
+    if (this.currentModel) {
+      return this.models3D.get(this.currentModel);
+    }
+    return null;
+  }
+
+  // Get currently loaded content asset (for recording)
+  get currentAssetContent() {
+    if (this.currentContent) {
+      return this.contentAssets.get(this.currentContent);
+    }
+    return null;
+  }
+
   updateModelsUI() {
     console.log('updateModelsUI called, models count:', this.models3D.size);
     const modelsList = document.getElementById('modelsList');
