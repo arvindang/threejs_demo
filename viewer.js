@@ -396,7 +396,7 @@ class Viewer3D {
     // Controls parameters
     this.params = {
       explode: 0,
-      slice: 0,
+      slice: 1,
       reset: () => this.reset()
     };
 
@@ -419,7 +419,7 @@ class Viewer3D {
     if (sliceSlider) {
       sliceSlider.addEventListener('input', (e) => {
         this.params.slice = parseFloat(e.target.value);
-        this.clipPlane.constant = this.params.slice;
+        this.updateSlice();
       });
     }
 
@@ -430,7 +430,7 @@ class Viewer3D {
         this.reset();
         // Reset slider values
         if (explodeSlider) explodeSlider.value = 0;
-        if (sliceSlider) sliceSlider.value = 0;
+        if (sliceSlider) sliceSlider.value = 1;
       });
     }
 
@@ -499,6 +499,9 @@ class Viewer3D {
         this.hideEmptyState();
         this.removeTestCube();
         
+        // Initialize slice to show whole object
+        this.updateSlice();
+        
         console.log(`✅ Successfully loaded model: ${name}`);
         console.log(`   - Parts found: ${this.parts.length}`);
         console.log(`   - Model size: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}`);
@@ -565,6 +568,9 @@ class Viewer3D {
         
         this.hideEmptyState();
         this.removeTestCube();
+        
+        // Initialize slice to show whole object
+        this.updateSlice();
         
         console.log(`✅ Successfully loaded GLTF model: ${name}`);
         console.log(`   - Parts found: ${this.parts.length}`);
@@ -644,6 +650,26 @@ class Viewer3D {
 
   hideEmptyState() {
     document.getElementById('viewer3DEmpty').style.display = 'none';
+  }
+
+  updateSlice() {
+    if (!this.model) {
+      this.clipPlane.constant = 1000; // Show everything when no model
+      return;
+    }
+    
+    // Calculate model bounds to determine clipping range
+    const box = new THREE.Box3().setFromObject(this.model);
+    const modelSize = box.getSize(new THREE.Vector3());
+    const minY = box.min.y;
+    const maxY = box.max.y;
+    
+    // Map slider value 0-1 to clipping range
+    // slice = 0: clip everything (constant = minY - buffer) 
+    // slice = 1: show everything (constant = maxY + buffer)
+    const buffer = modelSize.y * 0.1; // Small buffer to ensure full visibility
+    const clippingRange = (maxY + buffer) - (minY - buffer);
+    this.clipPlane.constant = (minY - buffer) + (this.params.slice * clippingRange);
   }
 
   explode(factor) {
@@ -817,8 +843,8 @@ class Viewer3D {
 
   reset() {
     this.params.explode = 0;
-    this.params.slice = 0;
-    this.clipPlane.constant = 0;
+    this.params.slice = 1;
+    this.updateSlice();
     this.explode(0);
     this.goBackToFullView(false);
     this.controls.reset();
@@ -832,7 +858,7 @@ class Viewer3D {
     const explodeSlider = document.getElementById('explodeSlider');
     const sliceSlider = document.getElementById('sliceSlider');
     if (explodeSlider) explodeSlider.value = 0;
-    if (sliceSlider) sliceSlider.value = 0;
+    if (sliceSlider) sliceSlider.value = 1;
   }
 
   onResize() {
