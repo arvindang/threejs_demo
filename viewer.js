@@ -980,7 +980,7 @@ class Viewer3D {
     this.animations = [];
     this.currentAction = null;
     
-    // Clear x-ray mode
+    // Clear x-ray mode data
     this.originalMaterialOpacity.clear();
     this.isXrayMode = false;
     
@@ -993,6 +993,12 @@ class Viewer3D {
       this.originalMaterials.clear(); // Clear material references
       this.showEmptyState();
     }
+    
+    // Reset x-ray slider UI
+    const xraySlider = document.getElementById('xraySlider');
+    const xrayValue = document.getElementById('xrayValue');
+    if (xraySlider) xraySlider.value = 0;
+    if (xrayValue) xrayValue.textContent = '0%';
   }
 
   showEmptyState() {
@@ -1423,9 +1429,8 @@ class Viewer3D {
   setXrayMode(transparency) {
     if (!this.model) return;
     
-    // Store original opacity if entering x-ray mode for the first time
-    if (transparency > 0 && !this.isXrayMode) {
-      this.originalMaterialOpacity.clear();
+    // Store original opacity values on first use
+    if (!this.isXrayMode && this.originalMaterialOpacity.size === 0) {
       this.model.traverse((obj) => {
         if (obj.isMesh && obj.material) {
           // Handle both single materials and material arrays
@@ -1440,10 +1445,9 @@ class Viewer3D {
           });
         }
       });
-      this.isXrayMode = true;
     }
     
-    // Apply transparency
+    // Apply transparency to all materials
     this.model.traverse((obj) => {
       if (obj.isMesh && obj.material) {
         const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
@@ -1453,22 +1457,27 @@ class Viewer3D {
           
           if (originalData) {
             if (transparency > 0) {
+              // Enable transparency and set new opacity
               material.transparent = true;
-              material.opacity = Math.max(0.1, originalData.originalOpacity - transparency);
+              // Calculate new opacity: start from original, reduce by transparency amount
+              // transparency of 0.9 should make it very transparent (opacity 0.1)
+              material.opacity = Math.max(0.1, originalData.originalOpacity * (1 - transparency));
+              this.isXrayMode = true;
             } else {
-              // Restore original values
+              // Restore original values when transparency is 0
               material.opacity = originalData.originalOpacity;
               material.transparent = originalData.originalTransparent;
+              this.isXrayMode = false;
             }
+            
+            // Ensure material updates are applied
+            material.needsUpdate = true;
           }
         });
       }
     });
     
-    // Exit x-ray mode if transparency is 0
-    if (transparency === 0) {
-      this.isXrayMode = false;
-    }
+    console.log(`X-ray mode: transparency=${transparency}, isActive=${this.isXrayMode}`);
   }
 }
 
