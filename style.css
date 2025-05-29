@@ -133,6 +133,7 @@ html, body {
 .viewer-3d-content {
   flex: 1;
   position: relative;
+  margin-bottom: 73px; /* Height of toolbar + padding */
 }
 
 .viewer-3d-controls {
@@ -195,6 +196,134 @@ html, body {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
+}
+
+/* 3D Toolbar Styles - Figma-style footer toolbar */
+.viewer-3d-toolbar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid #dee2e6;
+  padding: 0.75rem 1rem;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+}
+
+.toolbar-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 0.25rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.toolbar-tool {
+  border: none;
+  background: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6c757d;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.toolbar-tool:hover {
+  background: #f8f9fa;
+  color: #495057;
+  transform: translateY(-1px);
+}
+
+.toolbar-tool.active {
+  background: #e7f3ff;
+  color: #0d6efd;
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+
+.toolbar-tool i {
+  font-size: 18px;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background: #dee2e6;
+  margin: 0 0.25rem;
+}
+
+/* Tool Controls Panel - expandable area above toolbar */
+.tool-controls-panel {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid #dee2e6;
+  border-bottom: 1px solid #dee2e6;
+  padding: 1rem;
+  position: absolute;
+  bottom: 73px; /* Height of toolbar + padding */
+  left: 0;
+  right: 0;
+  z-index: 9;
+  animation: slideUp 0.3s ease;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.tool-controls-panel.d-none {
+  animation: slideDown 0.3s ease;
+}
+
+.tool-control-section {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.tool-controls-panel .form-range {
+  min-width: 150px;
+}
+
+.tool-controls-panel .form-label {
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 /* Content viewer styles */
@@ -330,16 +459,16 @@ html, body {
   }
   
   .control-item {
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: stretch;
   }
   
   .viewer-3d-controls .form-range {
-    width: 60px !important;
-    min-width: 60px;
+    width: 100%;
   }
   
   .viewer-3d-controls .form-label {
-    font-size: 0.8rem;
+    font-size: 0.875rem;
   }
   
   .viewer-3d-controls .btn-sm {
@@ -351,16 +480,50 @@ html, body {
     top: 5px;
     left: 5px;
   }
+  
+  /* Toolbar responsive styles */
+  .viewer-3d-toolbar {
+    padding: 0.5rem;
+  }
+  
+  .toolbar-tools {
+    gap: 0.125rem;
+    padding: 0.125rem;
+  }
+  
+  .toolbar-tool {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .toolbar-tool i {
+    font-size: 16px;
+  }
+  
+  .tool-controls-panel {
+    padding: 0.75rem;
+    bottom: 57px; /* Adjust for smaller toolbar */
+  }
+  
+  .tool-controls-panel .form-range {
+    min-width: 120px;
+  }
+  
+  /* Adjust 3D viewer content margin for smaller toolbar */
+  .viewer-3d-content {
+    margin-bottom: 57px; /* Height of mobile toolbar + padding */
+  }
 }
 
 @media (max-width: 480px) {
   .main-container {
-    padding: 0 8px;
+    padding: 0 8px; /* Further reduce padding on very small screens */
   }
   
   .drawer-toggle {
     width: 20px;
     height: 50px;
+    font-size: 12px;
   }
   
   .drawer-toggle.left {
@@ -376,17 +539,52 @@ html, body {
   }
   
   .drawer-content {
-    min-width: 200px;
     padding: 0.75rem;
   }
   
   .viewer-3d-controls .form-range {
-    width: 50px !important;
-    min-width: 50px;
+    width: 100%;
   }
   
   .viewer-3d-controls .form-label {
     font-size: 0.8rem;
+  }
+  
+  /* Mobile toolbar styles */
+  .viewer-3d-toolbar {
+    padding: 0.375rem;
+  }
+  
+  .toolbar-tools {
+    gap: 0.125rem;
+    padding: 0.125rem;
+  }
+  
+  .toolbar-tool {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .toolbar-tool i {
+    font-size: 14px;
+  }
+  
+  .tool-controls-panel {
+    padding: 0.5rem;
+    bottom: 49px; /* Adjust for even smaller toolbar */
+  }
+  
+  .tool-controls-panel .form-range {
+    min-width: 100px;
+  }
+  
+  .tool-controls-panel .form-label {
+    font-size: 0.8rem;
+  }
+  
+  /* Adjust 3D viewer content margin for smallest screens */
+  .viewer-3d-content {
+    margin-bottom: 49px; /* Height of mobile toolbar + padding */
   }
 }
   

@@ -408,12 +408,20 @@ class Viewer3D {
   }
 
   setupHTMLControls() {
+    // Setup toolbar tools
+    this.setupToolbar();
+    
     // Connect explode slider
     const explodeSlider = document.getElementById('explodeSlider');
     if (explodeSlider) {
       explodeSlider.addEventListener('input', (e) => {
         this.params.explode = parseFloat(e.target.value);
         this.explode(this.params.explode);
+        // Update value display
+        const explodeValue = document.getElementById('explodeValue');
+        if (explodeValue) {
+          explodeValue.textContent = Math.round(this.params.explode * 100) + '%';
+        }
       });
     }
 
@@ -423,6 +431,11 @@ class Viewer3D {
       sliceSlider.addEventListener('input', (e) => {
         this.params.slice = parseFloat(e.target.value);
         this.updateSlice();
+        // Update value display
+        const sliceValue = document.getElementById('sliceValue');
+        if (sliceValue) {
+          sliceValue.textContent = Math.round(this.params.slice * 100) + '%';
+        }
       });
     }
 
@@ -439,17 +452,6 @@ class Viewer3D {
       });
     });
 
-    // Connect reset button
-    const resetBtn = document.getElementById('resetViewBtn');
-    if (resetBtn) {
-      resetBtn.addEventListener('click', () => {
-        this.reset();
-        // Reset slider values
-        if (explodeSlider) explodeSlider.value = 0;
-        if (sliceSlider) sliceSlider.value = 1;
-      });
-    }
-
     // Connect back button
     const backBtn = document.getElementById('btnBack');
     if (backBtn) {
@@ -457,6 +459,115 @@ class Viewer3D {
         this.goBackToFullView();
       });
     }
+    
+    // Initialize Bootstrap tooltips
+    this.initializeTooltips();
+  }
+
+  setupToolbar() {
+    this.currentTool = 'arrow';
+    
+    // Get toolbar elements
+    const toolbarTools = document.querySelectorAll('.toolbar-tool');
+    const toolControlsPanel = document.getElementById('toolControlsPanel');
+    
+    // Setup tool click handlers
+    toolbarTools.forEach(tool => {
+      tool.addEventListener('click', (e) => {
+        const toolType = e.currentTarget.dataset.tool;
+        this.activateTool(toolType);
+      });
+    });
+  }
+
+  activateTool(toolType) {
+    // Update active tool
+    this.currentTool = toolType;
+    
+    // Update toolbar UI
+    const toolbarTools = document.querySelectorAll('.toolbar-tool');
+    toolbarTools.forEach(tool => {
+      if (tool.dataset.tool === toolType) {
+        tool.classList.add('active');
+      } else {
+        tool.classList.remove('active');
+      }
+    });
+    
+    // Handle tool-specific logic
+    switch (toolType) {
+      case 'arrow':
+        this.hideToolControls();
+        break;
+        
+      case 'explode':
+        this.showToolControls('explodeControls');
+        break;
+        
+      case 'slice':
+        this.showToolControls('sliceControls');
+        break;
+        
+      case 'reset':
+        this.reset();
+        // Reset slider values
+        const explodeSlider = document.getElementById('explodeSlider');
+        const sliceSlider = document.getElementById('sliceSlider');
+        if (explodeSlider) explodeSlider.value = 0;
+        if (sliceSlider) sliceSlider.value = 1;
+        // Update value displays
+        const explodeValue = document.getElementById('explodeValue');
+        const sliceValue = document.getElementById('sliceValue');
+        if (explodeValue) explodeValue.textContent = '0%';
+        if (sliceValue) sliceValue.textContent = '100%';
+        // Auto-return to arrow tool after reset
+        setTimeout(() => this.activateTool('arrow'), 300);
+        break;
+    }
+  }
+
+  showToolControls(controlsId) {
+    const toolControlsPanel = document.getElementById('toolControlsPanel');
+    const allControlSections = document.querySelectorAll('.tool-control-section');
+    
+    // Hide all control sections first
+    allControlSections.forEach(section => {
+      section.classList.add('d-none');
+    });
+    
+    // Show the requested control section
+    const targetControls = document.getElementById(controlsId);
+    if (targetControls) {
+      targetControls.classList.remove('d-none');
+    }
+    
+    // Show the panel
+    if (toolControlsPanel) {
+      toolControlsPanel.classList.remove('d-none');
+    }
+  }
+
+  hideToolControls() {
+    const toolControlsPanel = document.getElementById('toolControlsPanel');
+    const allControlSections = document.querySelectorAll('.tool-control-section');
+    
+    // Hide all control sections
+    allControlSections.forEach(section => {
+      section.classList.add('d-none');
+    });
+    
+    // Hide the panel
+    if (toolControlsPanel) {
+      toolControlsPanel.classList.add('d-none');
+    }
+  }
+
+  initializeTooltips() {
+    // Initialize Bootstrap tooltips for toolbar tools
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+      return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
   }
 
   setupRaycasting() {
@@ -1046,10 +1157,14 @@ class Viewer3D {
     const explodeSlider = document.getElementById('explodeSlider');
     const sliceSlider = document.getElementById('sliceSlider');
     const sliceYRadio = document.getElementById('sliceY');
+    const explodeValue = document.getElementById('explodeValue');
+    const sliceValue = document.getElementById('sliceValue');
     
     if (explodeSlider) explodeSlider.value = 0;
     if (sliceSlider) sliceSlider.value = 1;
     if (sliceYRadio) sliceYRadio.checked = true;
+    if (explodeValue) explodeValue.textContent = '0%';
+    if (sliceValue) sliceValue.textContent = '100%';
   }
 
   onResize() {
