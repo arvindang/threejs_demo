@@ -35,6 +35,7 @@
       display: flex;
       flex-direction: row;
       overflow: hidden;
+      padding: 0 32px; /* Add padding for fixed toggle buttons */
     }
     
     /* Drawer styles */
@@ -75,35 +76,55 @@
     
     /* Toggle buttons */
     .drawer-toggle {
-      position: absolute;
+      position: fixed;
       top: 50%;
       transform: translateY(-50%);
-      z-index: 10;
-      width: 32px;
-      height: 60px;
+      z-index: 100;
+      width: 28px;
+      height: 80px;
       padding: 0;
-      border-radius: 0;
       border: 1px solid #dee2e6;
       background: #ffffff;
       display: flex;
       align-items: center;
       justify-content: center;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      cursor: pointer;
     }
     
     .drawer-toggle.left {
-      right: -32px;
+      left: 280px;
       border-left: none;
-      border-radius: 0 6px 6px 0;
+      border-radius: 0 8px 8px 0;
+    }
+    
+    .drawer-toggle.left.collapsed {
+      left: 0;
     }
     
     .drawer-toggle.right {
-      left: -32px;
+      right: 280px;
       border-right: none;
-      border-radius: 6px 0 0 6px;
+      border-radius: 8px 0 0 8px;
+    }
+    
+    .drawer-toggle.right.collapsed {
+      right: 0;
     }
     
     .drawer-toggle:hover {
       background: #f8f9fa;
+      transform: translateY(-50%) scale(1.05);
+    }
+    
+    .drawer-toggle i {
+      font-size: 14px;
+      transition: transform 0.2s ease;
+    }
+    
+    .drawer-toggle:hover i {
+      transform: scale(1.1);
     }
     
     /* Main content panes */
@@ -250,6 +271,39 @@
     
     /* Responsive adjustments for small screens */
     @media (max-width: 768px) {
+      .main-container {
+        padding: 0 16px; /* Reduce padding on smaller screens */
+      }
+      
+      .drawer-toggle {
+        width: 24px;
+        height: 60px;
+      }
+      
+      .drawer-toggle.left {
+        left: 240px;
+      }
+      
+      .drawer-toggle.left.collapsed {
+        left: 0;
+      }
+      
+      .drawer-toggle.right {
+        right: 240px;
+      }
+      
+      .drawer-toggle.right.collapsed {
+        right: 0;
+      }
+      
+      .sidebar-drawer {
+        width: 240px;
+      }
+      
+      .drawer-content {
+        min-width: 240px;
+      }
+      
       .viewer-3d-controls {
         padding: 0.5rem;
         flex-direction: column;
@@ -279,6 +333,32 @@
     }
     
     @media (max-width: 480px) {
+      .main-container {
+        padding: 0 8px;
+      }
+      
+      .drawer-toggle {
+        width: 20px;
+        height: 50px;
+      }
+      
+      .drawer-toggle.left {
+        left: 200px;
+      }
+      
+      .drawer-toggle.right {
+        right: 200px;
+      }
+      
+      .sidebar-drawer {
+        width: 200px;
+      }
+      
+      .drawer-content {
+        min-width: 200px;
+        padding: 0.75rem;
+      }
+      
       .viewer-3d-controls .form-range {
         width: 50px !important;
         min-width: 50px;
@@ -495,18 +575,20 @@
     // Drawer toggle functionality
     function toggleDrawer(drawerId) {
       const drawer = document.getElementById(drawerId);
-      const toggle = drawer.querySelector('.drawer-toggle i');
+      const toggle = drawer.querySelector('.drawer-toggle');
+      const icon = toggle.querySelector('i');
       
       drawer.classList.toggle('collapsed');
+      toggle.classList.toggle('collapsed');
       
       // Update toggle icon based on drawer position and state
       const isRight = drawer.classList.contains('right');
       const isCollapsed = drawer.classList.contains('collapsed');
       
       if (isRight) {
-        toggle.className = isCollapsed ? 'bi bi-chevron-left' : 'bi bi-chevron-right';
+        icon.className = isCollapsed ? 'bi bi-chevron-left' : 'bi bi-chevron-right';
       } else {
-        toggle.className = isCollapsed ? 'bi bi-chevron-right' : 'bi bi-chevron-left';
+        icon.className = isCollapsed ? 'bi bi-chevron-right' : 'bi bi-chevron-left';
       }
     }
   </script>
