@@ -49,15 +49,15 @@
 ## 🎮 Phase 2: Interaction Improvements (Priority: HIGH)
 
 ### 3D Object Selection Fixes
-- [ ] **Selection Sensitivity**
-  - [ ] Implement click threshold/delay to prevent accidental selection, or notice if drag is happening, and prevent click (when rotating and not trying to select)
-  - [ ] Add visual hover states before selection
+- ✅ **Selection Sensitivity**
+  - ✅ Implement click threshold/delay to prevent accidental selection, or notice if drag is happening, and prevent click (when rotating and not trying to select)
+  - ✅ Add visual hover states before selection
 
-- [ ] **Focus/Isolation Improvements**
-  - [ ] Center selected object properly in view
-  - [ ] Smooth camera transitions to focused object
-  - [ ] Visual indicators for isolated state
-  - [ ] Breadcrumb navigation (Full View > Part Name)
+- ✅ **Focus/Isolation Improvements**
+  - ✅ Center selected object properly in view
+  - ✅ Smooth camera transitions to focused object
+  - ✅ Visual indicators for isolated state
+  - ✅ Breadcrumb navigation (Full View > Part Name)
 
 ### Recording Enhancements
 - [ ] **Multi-Pane Recording**
@@ -107,90 +107,194 @@
   - [ ] Smooth transitions during scrubbing
   - [ ] Visual indicators of what's changing
 
-## 🔧 Phase 4: Technical Improvements (Priority: MEDIUM)
+### Code Architecture Refactoring (Priority: HIGH)
+- [ ] **Viewer3D.js Modularization** - Split 1,336-line monolithic file
+  - [x] Create folder structure: `js/core/systems/`, `js/core/ui/`, `js/core/loaders/`, `js/core/utils/`
+  - [x] **Phase 1: Setup & RenderingSystem**
+    - [x] Create `systems/RenderingSystem.js` (scene, camera, renderer, lighting)
+    - [x] Move setupLighting(), renderer setup, scene setup methods
+    - [x] Test 3D viewer still works with basic rendering
+  - [x] **Phase 2: ModelLoader**
+    - [x] Create `loaders/ModelLoader.js` (GLB/GLTF loading, model management)
+    - [x] Move loadModel(), loadGLTFModel(), clearModel(), fitModelToPane() methods
+    - [x] Update model bounds calculations to use ModelLoader.getModelBounds()
+    - [x] Setup callback system for model events (onModelLoaded, onModelCleared)
+    - [x] Test model loading still works
+  - [x] **Phase 3: InteractionSystem**
+    - [x] Create `systems/InteractionSystem.js` (mouse events, raycasting, selection)
+    - [x] Move setupRaycasting(), onMouse*(), handleClick(), focus methods
+    - [x] Setup callback system for interaction events (onPartSelected, onPartFocused, onBackToFullView)
+    - [x] Update model references when models change
+    - [x] Test object selection and hover still works
+  - [x] **Phase 4: EffectsSystem**
+    - [x] Create `systems/EffectsSystem.js` (explode, slice, x-ray effects)
+    - [x] Move explode(), updateSlice(), setXrayMode(), calculateExplosionDirections()
+    - [x] Test all visual effects still work
+  - [x] **Phase 5: UIManager & Controls**
+    - [x] Create `ui/UIManager.js` (main UI coordination)
+    - [x] Create `ui/ToolManager.js` (tool activation and switching)
+    - [x] Create `ui/ControlsManager.js` (slider, button event handling)
+    - [x] Create `ui/KeyboardManager.js` (keyboard shortcuts)
+    - [x] Move setupHTMLControls(), setupToolbar(), setupKeyboardShortcuts()
+    - [x] Test all UI interactions still work
+  - [x] **Phase 6: AnimationSystem**
+    - [x] Create `systems/AnimationSystem.js` (animation mixer, playback controls)
+    - [x] Move setupAnimations(), animation control methods, mixer logic
+    - [x] Test animation playback still works
+  - [x] **Phase 7: CameraSystem & Utils**
+    - [x] Create `systems/CameraSystem.js` (camera management, focus, fit-to-view)
+    - [x] Create `utils/MathUtils.js` (explosion calculations, geometry utils)
+    - [x] Create `utils/StateManager.js` (model state, UI state synchronization)
+    - [x] Move camera logic, focusOnPart(), goBackToFullView()
+    - [x] Test camera controls and state management
+  - [x] **Phase 8: Integration & Testing**
+    - [x] Update main `Viewer3D.js` to orchestrate all systems
+    - [x] Create system communication interfaces
+    - [x] Full integration testing of all features
+    - [x] Performance testing to ensure no regressions
+  - [ ] **Phase 9: Advanced Architecture Improvements (NEW)**
+    - [ ] **System Coordination Layer**
+      - [ ] Create `systems/SystemCoordinator.js` - central event bus for system communication
+      - [ ] Replace manual callback setup with event-driven architecture
+      - [ ] Implement dependency injection pattern for better testability
+      - [ ] Add system lifecycle management (initialize, start, stop, dispose)
+    - [ ] **Error Handling & Resilience**
+      - [ ] Add comprehensive error boundaries in each system
+      - [ ] Implement graceful degradation for missing dependencies
+      - [ ] Add retry mechanisms for network operations (model loading)
+      - [ ] Create centralized error reporting system
+    - [ ] **Performance Monitoring System**
+      - [ ] Add `utils/PerformanceMonitor.js` for FPS tracking and memory usage
+      - [ ] Implement frame time budget monitoring for render loop
+      - [ ] Add memory leak detection for model switching
+      - [ ] Create performance metrics dashboard
+    - [ ] **Configuration Management**
+      - [ ] Move all hardcoded values to `config/SystemConfig.js`
+      - [ ] Add environment-specific configurations (dev/prod)
+      - [ ] Implement runtime configuration updates
+      - [ ] Add configuration validation
+  - [ ] **Phase 10: System Optimization & Cleanup**
+    - [ ] **Memory Management**
+      - [ ] Add proper dispose() methods to all systems
+      - [ ] Implement object pooling for frequently created objects
+      - [ ] Add memory usage monitoring and alerts
+      - [ ] Fix potential memory leaks in texture/geometry management
+    - [ ] **Render Loop Optimization**
+      - [ ] Move animation mixer from RenderingSystem to AnimationSystem
+      - [ ] Implement render-on-demand instead of continuous rendering
+      - [ ] Add LOD (Level of Detail) system for complex models
+      - [ ] Implement frustum culling optimization
+    - [ ] **Bundle Optimization**
+      - [ ] Split large systems into smaller, lazy-loaded modules
+      - [ ] Implement dynamic imports for optional features
+      - [ ] Add tree-shaking optimization
+      - [ ] Create minimal build for basic 3D viewing
+  - [ ] **Phase 11: Developer Experience & Documentation**
+    - [ ] **Type Safety (Optional)**
+      - [ ] Add JSDoc type annotations to all systems
+      - [ ] Consider TypeScript migration path
+      - [ ] Add interface definitions for system contracts
+      - [ ] Create type checking in CI/CD pipeline
+    - [ ] **Testing Infrastructure**
+      - [ ] Create unit tests for each system
+      - [ ] Add integration test automation
+      - [ ] Implement visual regression testing
+      - [ ] Add performance benchmarking tests
+    - [ ] **Developer Tools**
+      - [ ] Create development debug panel
+      - [ ] Add system state inspection tools
+      - [ ] Implement hot module reloading
+      - [ ] Add profiling and debugging utilities
+    - [ ] **Documentation**
+      - [ ] Create architecture decision records (ADRs)
+      - [ ] Add inline code documentation
+      - [ ] Create system interaction diagrams
+      - [ ] Write migration guide for new features
+  - [ ] **Phase 12: Missing System Implementations**
+    - [ ] **Scene Management System**
+      - [ ] Create `systems/SceneManager.js` for multi-scene support
+      - [ ] Add scene switching and state preservation
+      - [ ] Implement background/environment management
+      - [ ] Add lighting preset system
+    - [ ] **Asset Pipeline System**
+      - [ ] Create `systems/AssetPipeline.js` for preprocessing
+      - [ ] Add automatic texture optimization
+      - [ ] Implement model compression/optimization
+      - [ ] Add asset caching strategies
+    - [ ] **Plugin System Architecture**
+      - [ ] Design plugin interface for extensibility
+      - [ ] Create plugin loader and dependency resolution
+      - [ ] Add plugin lifecycle management
+      - [ ] Implement sandboxed plugin execution
+  - [ ] **Phase 13: Integration Improvements**
+    - [ ] **RecordingManager Integration**
+      - [ ] Reduce RecordingManager coupling with individual systems
+      - [ ] Use SystemCoordinator for recording event capture
+      - [ ] Add proper error handling in recording playback
+      - [ ] Implement recording state recovery mechanisms
+    - [ ] **Cross-System State Management**
+      - [ ] Enhance StateManager with proper state diffing
+      - [ ] Add undo/redo functionality across systems
+      - [ ] Implement state serialization/deserialization
+      - [ ] Add state validation and migration
+    - [ ] **Event System Consolidation**
+      - [ ] Replace individual callback systems with central event bus
+      - [ ] Add event prioritization and queuing
+      - [ ] Implement event batching for performance
+      - [ ] Add event debugging and logging
+  - [ ] **Phase 14: Production Readiness**
+    - [ ] **Error Recovery & Fallbacks**
+      - [ ] Add WebGL context loss recovery
+      - [ ] Implement graceful degradation for older browsers
+      - [ ] Add fallback rendering modes
+      - [ ] Create offline operation support
+    - [ ] **Security & Validation**
+      - [ ] Add input validation for all user data
+      - [ ] Implement file type validation and sanitization
+      - [ ] Add XSS protection for dynamic content
+      - [ ] Create secure configuration management
+    - [ ] **Performance Monitoring**
+      - [ ] Add real-time performance metrics
+      - [ ] Implement automated performance regression detection
+      - [ ] Add user experience monitoring
+      - [ ] Create performance optimization recommendations
+  - [ ] **Phase 15: Future Architecture Considerations**
+    - [ ] **Web Components Migration**
+      - [ ] Consider migrating UI systems to Web Components
+      - [ ] Add shadow DOM encapsulation for better isolation
+      - [ ] Implement custom element definitions
+      - [ ] Add component composition patterns
+    - [ ] **Worker Thread Support**
+      - [ ] Move heavy computations to Web Workers
+      - [ ] Implement model processing in background threads
+      - [ ] Add worker-based asset pipeline
+      - [ ] Create main thread performance isolation
+    - [ ] **Streaming & Progressive Loading**
+      - [ ] Add progressive model loading
+      - [ ] Implement streaming texture delivery
+      - [ ] Create level-of-detail streaming
+      - [ ] Add bandwidth-adaptive quality settings
 
-### Performance Optimization
-- [ ] **3D Rendering**
-  - [ ] LOD (Level of Detail) for complex models
-  - [ ] Frustum culling optimization
-  - [ ] Texture compression and optimization
-  - [ ] Memory management for multiple models
+## 🎯 Current Architecture Assessment
 
-- [ ] **File Handling**
-  - [ ] Lazy loading of assets
-  - [ ] Background processing for large files
-  - [ ] Caching strategies
-  - [ ] Progressive loading indicators
+### ✅ **Strengths of Current Implementation**
+- **Excellent System Separation**: Each system has clear responsibilities
+- **Good Callback Architecture**: Systems communicate through well-defined callbacks
+- **Backward Compatibility**: Legacy API is maintained through delegation
+- **Proper Resource Management**: Most systems handle cleanup appropriately
 
-### Browser Compatibility
-- [ ] **Cross-browser Testing**
-  - [ ] Chrome, Firefox, Safari, Edge testing
-  - [ ] Mobile browser compatibility
-  - [ ] WebGL fallback handling
-  - [ ] Touch gesture support
+### ⚠️ **Areas Needing Improvement**
+- **Manual System Coordination**: Viewer3D manually orchestrates all systems
+- **Inconsistent Error Handling**: Some systems lack comprehensive error boundaries
+- **Performance Gaps**: Continuous rendering and memory usage could be optimized
+- **Testing Coverage**: Missing automated testing for system interactions
+- **Configuration Scatter**: Hardcoded values spread across multiple files
 
-## 🤖 Phase 5: AI Integration (Priority: LOW - Future)
-
-### Transcription & Analysis
-- [ ] **Audio Processing**
-  - [ ] Integration with OpenAI Whisper or similar
-  - [ ] Real-time transcription during recording
-  - [ ] Speaker identification
-  - [ ] Confidence scoring
-
-- [ ] **Content Generation**
-  - [ ] Auto-generated table of contents
-  - [ ] Timestamp-based chapter markers
-  - [ ] Key concept extraction
-  - [ ] Summary generation
-
-### AI Teaching Assistant
-- [ ] **RAG Implementation**
-  - [ ] Vector database for lesson content
-  - [ ] Semantic search across transcripts
-  - [ ] Context-aware question answering
-  - [ ] Integration with lesson materials
-
-- [ ] **Interactive Features**
-  - [ ] Student question interface
-  - [ ] AI-generated quiz questions
-  - [ ] Concept clarification
-  - [ ] Related content suggestions
-
-## 🐛 Bug Fixes & Polish (Priority: HIGH)
-
-### Current Issues
-- [ ] **3D Selection Issues**
-  - [ ] Fix overly sensitive part selection
-  - [ ] Improve camera centering on focused objects
-  - [ ] Better visual feedback for selection states
-  - [ ] Handle edge cases in object isolation
-
-### UI/UX Polish
-- [ ] **Visual Design**
-  - [ ] Consistent styling across components
-  - [ ] Loading states and animations
-  - [ ] Error message improvements
-  - [ ] Accessibility improvements (ARIA labels, keyboard nav)
-
-## 📱 Phase 6: Mobile & Accessibility (Priority: LOW)
-
-### Mobile Support
-- [ ] **Touch Interactions**
-  - [ ] Touch gestures for 3D navigation
-  - [ ] Mobile-optimized UI layout
-  - [ ] Responsive design improvements
-  - [ ] Performance optimization for mobile
-
----
-
-## 📋 Next Immediate Actions
-
-1. **Fix 3D Selection Issues** - Critical user experience problem
-2. **Enhance Recording System** - Capture both panes simultaneously
-3. **Add PowerPoint Support** - Complete the content viewer functionality
-4. **Improve Playback Synchronization** - Better timeline and state management
-5. **Polish UI/UX** - Loading states, error handling, accessibility
+### 🔧 **Recommended Immediate Actions**
+1. **Implement SystemCoordinator** - Central event bus for cleaner system communication
+2. **Add Comprehensive Error Handling** - Prevent system crashes from propagating
+3. **Create Performance Monitoring** - Track and optimize resource usage
+4. **Implement Automated Testing** - Ensure system reliability during changes
 
 ## 🎯 Success Metrics to Track
 

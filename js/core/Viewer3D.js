@@ -1,7 +1,15 @@
 import * as THREE from 'https://unpkg.com/three@0.164.0/build/three.module.js';
 import { OrbitControls } from 'https://unpkg.com/three@0.164.0/examples/jsm/controls/OrbitControls.js';
-import { GLTFLoader } from 'https://unpkg.com/three@0.164.0/examples/jsm/loaders/GLTFLoader.js';
 import { gsap } from "https://cdn.jsdelivr.net/npm/gsap@3.12.5/+esm";
+import { RenderingSystem } from './systems/RenderingSystem.js';
+import { ModelLoader } from './loaders/ModelLoader.js';
+import { InteractionSystem } from './systems/InteractionSystem.js';
+import { EffectsSystem } from './systems/EffectsSystem.js';
+import { AnimationSystem } from './systems/AnimationSystem.js';
+import { CameraSystem } from './systems/CameraSystem.js';
+import { UIManager } from './ui/UIManager.js';
+import { MathUtils } from './utils/MathUtils.js';
+import { StateManager } from './utils/StateManager.js';
 
 // Export THREE to global window object to avoid multiple imports
 window.THREE = THREE;
@@ -9,77 +17,252 @@ window.THREE = THREE;
 export class Viewer3D {
   constructor(containerId) {
     this.container = document.getElementById(containerId);
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xf8f9fa);
     
-    // Increase far clipping plane to prevent model disappearing when zooming out
-    this.camera = new THREE.PerspectiveCamera(35, 1, 0.01, 10000);
-    this.camera.position.set(3, 2, 6);
+    // Initialize rendering system
+    this.renderingSystem = new RenderingSystem(this.container);
     
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Get references to Three.js objects from rendering system
+    this.scene = this.renderingSystem.getScene();
+    this.camera = this.renderingSystem.getCamera();
+    this.renderer = this.renderingSystem.getRenderer();
+    this.controls = this.renderingSystem.getControls();
+    this.clipPlane = this.renderingSystem.getClipPlane();
     
-    this.container.appendChild(this.renderer.domElement);
+    // Initialize camera system
+    this.cameraSystem = new CameraSystem(this.camera, this.controls, this.container);
+    this.setupCameraSystemCallbacks();
     
-    this.setupLighting();
-    this.setupControls();
-    this.setupClipping();
+    // Initialize model loader
+    this.modelLoader = new ModelLoader(this.scene, this.camera, this.controls);
+    this.modelLoader.setCameraSystem(this.cameraSystem);
+    this.setupModelLoaderCallbacks();
+    
+    // Initialize interaction system
+    this.interactionSystem = new InteractionSystem(this.camera, this.renderer, this.controls);
+    this.interactionSystem.setCameraSystem(this.cameraSystem);
+    this.setupInteractionSystemCallbacks();
+    
+    // Initialize effects system
+    this.effectsSystem = new EffectsSystem(this.renderingSystem);
+    
+    // Initialize animation system
+    this.animationSystem = new AnimationSystem(this.renderingSystem);
+    this.setupAnimationSystemCallbacks();
+    
+    // Initialize state manager
+    this.stateManager = new StateManager();
+    this.setupStateManagerCallbacks();
+    
+    // Initialize UI manager
+    this.uiManager = new UIManager();
+    this.setupUIManagerCallbacks();
+    
+    // Default to Y-axis slicing (existing behavior)
+    this.sliceDirection = 'y';
+    
     this.setupGUI();
-    this.setupRaycasting();
     
+    // Model state (managed by StateManager and systems)
     this.model = null;
     this.parts = [];
     this.currentlyFocusedPart = null;
     this.previousCameraState = { position: null, target: null };
     
-    // Animation system
-    this.mixer = null;
-    this.animations = [];
-    this.currentAction = null;
-    this.clock = new THREE.Clock();
+    // Legacy animation properties for backward compatibility - these now delegate to AnimationSystem
+    this.clock = new THREE.Clock(); // Keep for any external use
     
-    // X-ray system
+    // X-ray system - delegated to EffectsSystem but keeping backward compatibility
     this.originalMaterialOpacity = new Map();
     this.isXrayMode = false;
-    
-    this.onResize();
-    window.addEventListener('resize', () => this.onResize());
-    
-    this.animate();
   }
 
-  setupLighting() {
-    // Ambient light
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
-    this.scene.add(ambientLight);
-
-    // Directional light
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
-    directionalLight.position.set(5, 10, 5);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 1024;
-    directionalLight.shadow.mapSize.height = 1024;
-    this.scene.add(directionalLight);
-
-    // Hemisphere light
-    const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x404040, 0.8);
-    this.scene.add(hemisphereLight);
+  setupCameraSystemCallbacks() {
+    this.cameraSystem.setCallback((cameraEvent) => {
+      // Update state manager with camera changes
+      this.stateManager.updateCameraState(
+        cameraEvent.position,
+        cameraEvent.target,
+        cameraEvent.part
+      );
+      
+      // Handle specific camera events
+      switch (cameraEvent.type) {
+        case 'focus_on_part':
+          this.currentlyFocusedPart = cameraEvent.part;
+          break;
+        case 'back_to_full_view':
+          this.currentlyFocusedPart = null;
+          break;
+      }
+    });
   }
 
-  setupControls() {
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
+  setupModelLoaderCallbacks() {
+    this.modelLoader.setCallbacks({
+      onModelLoaded: (gltf, model, parts) => {
+        // Update local references
+        this.model = model;
+        this.parts = parts;
+        
+        // Update all systems with new model/parts
+        this.interactionSystem.updateModelReferences(model, parts);
+        this.effectsSystem.updateModelReferences(model, parts, this.modelLoader);
+        this.animationSystem.updateModelReferences(model);
+        this.cameraSystem.updateModelReferences(model, parts);
+        
+        // Update state manager
+        this.stateManager.updateModelState(model, parts);
+        
+        // Setup animations if available
+        if (gltf.animations && gltf.animations.length > 0) {
+          this.animationSystem.setupAnimations(gltf.animations);
+        }
+        
+        this.calculateExplosionDirections();
+        this.updateSlice();
+      },
+      onModelCleared: () => {
+        // Clear local state
+        this.model = null;
+        this.parts = [];
+        this.currentlyFocusedPart = null;
+        this.previousCameraState = { position: null, target: null };
+        
+        // Update all systems
+        this.interactionSystem.updateModelReferences(null, []);
+        this.effectsSystem.clearModel();
+        this.animationSystem.clearModel();
+        this.cameraSystem.updateModelReferences(null, []);
+        
+        // Update state manager
+        this.stateManager.updateModelState(null, []);
+        
+        // Clear x-ray mode - legacy compatibility
+        this.originalMaterialOpacity.clear();
+        this.isXrayMode = false;
+        
+        // Hide back button
+        const backButton = document.getElementById('backButtonOverlay');
+        if (backButton) {
+          backButton.classList.remove('visible');
+        }
+      },
+      onProgress: (progress) => {
+        console.log('Loading progress:', (progress.loaded / progress.total * 100) + '%');
+      },
+      onError: (error) => {
+        console.error('Error loading model:', error);
+      }
+    });
   }
 
-  setupClipping() {
-    // Default to Y-axis slicing (existing behavior)
-    this.sliceDirection = 'y';
-    this.clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
-    this.renderer.clippingPlanes = [this.clipPlane];
-    this.renderer.localClippingEnabled = true;
+  setupInteractionSystemCallbacks() {
+    this.interactionSystem.setCallbacks({
+      onPartSelected: (selectedMesh) => {
+        console.log('Part selected:', selectedMesh.name);
+      },
+      onPartFocused: (focusedMesh) => {
+        // Update local reference and state manager
+        this.currentlyFocusedPart = focusedMesh;
+        this.stateManager.updateModelState(this.model, this.parts, focusedMesh);
+      },
+      onBackToFullView: () => {
+        // Fit model to pane when going back to full view
+        this.fitModelToPane();
+        this.currentlyFocusedPart = null;
+        this.stateManager.updateModelState(this.model, this.parts, null);
+      }
+    });
+  }
+
+  setupAnimationSystemCallbacks() {
+    this.animationSystem.setCallbacks({
+      onAnimationUIUpdate: () => {
+        // Animation UI has been updated
+      },
+      onAnimationButtonsUpdate: () => {
+        // Animation buttons have been updated
+      }
+    });
+  }
+
+  setupStateManagerCallbacks() {
+    this.stateManager.setCallbacks({
+      onModelStateChange: (newState, oldState) => {
+        console.log('Model state changed:', newState);
+      },
+      onUIStateChange: (newState, oldState) => {
+        console.log('UI state changed:', newState);
+      },
+      onCameraStateChange: (newState, oldState) => {
+        console.log('Camera state changed:', newState);
+      },
+      onToolStateChange: (newTool, oldTool) => {
+        console.log('Tool changed from', oldTool, 'to', newTool);
+      }
+    });
+  }
+
+  setupUIManagerCallbacks() {
+    this.uiManager.setCallbacks({
+      // Effects callbacks
+      onExplodeChange: (value) => {
+        this.params.explode = value;
+        this.effectsSystem.setExplodeAmount(value);
+        this.stateManager.updateUIState({ explode: value });
+      },
+      onSliceChange: (value) => {
+        this.params.slice = value;
+        this.effectsSystem.setSliceAmount(value);
+        this.stateManager.updateUIState({ slice: value });
+      },
+      onSliceDirectionChange: (direction) => {
+        this.params.sliceDirection = direction;
+        this.sliceDirection = direction;
+        this.effectsSystem.setSliceDirection(direction);
+        this.stateManager.updateUIState({ sliceDirection: direction });
+      },
+      onXrayChange: (value) => {
+        this.params.xray = value;
+        this.effectsSystem.setXrayMode(value);
+        this.isXrayMode = value < 1.0; // Update legacy compatibility
+        this.stateManager.updateUIState({ xray: value });
+      },
+      
+      // Animation callbacks - delegate to AnimationSystem
+      onAnimationSelect: (animationName) => {
+        this.animationSystem.selectAnimation(animationName);
+      },
+      onAnimationPlay: () => {
+        this.animationSystem.playAnimation();
+      },
+      onAnimationPause: () => {
+        this.animationSystem.pauseAnimation();
+      },
+      onAnimationStop: () => {
+        this.animationSystem.stopAnimation();
+      },
+      onAnimationSpeedChange: (speed) => {
+        this.animationSystem.setAnimationSpeed(speed);
+      },
+      onUpdateAnimationUI: () => {
+        this.animationSystem.updateAnimationUI();
+      },
+      
+      // Navigation callbacks
+      onBackButton: () => {
+        this.goBackToFullView();
+      },
+      onReset: () => {
+        this.resetInternal();
+      },
+      
+      // Tool callbacks
+      onToolActivated: (toolType) => {
+        this.stateManager.updateToolState(toolType);
+        console.log('Tool activated:', toolType);
+      }
+    });
   }
 
   setupGUI() {
@@ -92,916 +275,84 @@ export class Viewer3D {
       reset: () => this.reset()
     };
 
-    // Connect HTML controls instead of lil-gui
-    this.setupHTMLControls();
+    // UI Manager handles all the controls now
+    // No need for individual control setup
   }
 
-  setupHTMLControls() {
-    // Setup toolbar tools
-    this.setupToolbar();
-    
-    // Connect explode slider
-    const explodeSlider = document.getElementById('explodeSlider');
-    if (explodeSlider) {
-      explodeSlider.addEventListener('input', (e) => {
-        this.params.explode = parseFloat(e.target.value);
-        this.explode(this.params.explode);
-        // Update value display
-        const explodeValue = document.getElementById('explodeValue');
-        if (explodeValue) {
-          explodeValue.textContent = Math.round(this.params.explode * 100) + '%';
-        }
-      });
-    }
-
-    // Connect slice slider  
-    const sliceSlider = document.getElementById('sliceSlider');
-    if (sliceSlider) {
-      sliceSlider.addEventListener('input', (e) => {
-        this.params.slice = parseFloat(e.target.value);
-        this.updateSlice();
-        // Update value display
-        const sliceValue = document.getElementById('sliceValue');
-        if (sliceValue) {
-          sliceValue.textContent = Math.round(this.params.slice * 100) + '%';
-        }
-      });
-    }
-
-    // Connect slice direction radio buttons
-    const sliceDirectionInputs = document.querySelectorAll('input[name="sliceDirection"]');
-    sliceDirectionInputs.forEach(input => {
-      input.addEventListener('change', (e) => {
-        if (e.target.checked) {
-          this.params.sliceDirection = e.target.value;
-          this.sliceDirection = e.target.value;
-          this.updateSliceDirection();
-          this.updateSlice();
-        }
-      });
-    });
-
-    // Connect animation controls
-    const animationSelect = document.getElementById('animationSelect');
-    const animationPlay = document.getElementById('animationPlay');
-    const animationPause = document.getElementById('animationPause');
-    const animationStop = document.getElementById('animationStop');
-    const animationSpeed = document.getElementById('animationSpeed');
-    
-    if (animationSelect) {
-      animationSelect.addEventListener('change', (e) => {
-        this.selectAnimation(e.target.value);
-      });
-    }
-    
-    if (animationPlay) {
-      animationPlay.addEventListener('click', () => this.playAnimation());
-    }
-    
-    if (animationPause) {
-      animationPause.addEventListener('click', () => this.pauseAnimation());
-    }
-    
-    if (animationStop) {
-      animationStop.addEventListener('click', () => this.stopAnimation());
-    }
-    
-    if (animationSpeed) {
-      animationSpeed.addEventListener('input', (e) => {
-        const speed = parseFloat(e.target.value);
-        this.setAnimationSpeed(speed);
-        const speedValue = document.getElementById('animationSpeedValue');
-        if (speedValue) {
-          speedValue.textContent = speed.toFixed(1) + 'x';
-        }
-      });
-    }
-
-    // Connect x-ray controls
-    const xraySlider = document.getElementById('xraySlider');
-    if (xraySlider) {
-      xraySlider.addEventListener('input', (e) => {
-        const transparencyPercentage = parseFloat(e.target.value);
-        // User's "transparency" percentage should directly correspond to material opacity
-        // 100% transparency = fully opaque, 0% transparency = fully transparent
-        this.setXrayMode(transparencyPercentage);
-        const xrayValue = document.getElementById('xrayValue');
-        if (xrayValue) {
-          xrayValue.textContent = Math.round(transparencyPercentage * 100) + '%';
-        }
-      });
-    }
-
-    // Connect back button
-    const backBtn = document.getElementById('btnBack');
-    if (backBtn) {
-      backBtn.addEventListener('click', () => {
-        this.goBackToFullView();
-      });
-    }
-    
-    // Initialize Bootstrap tooltips
-    this.initializeTooltips();
-    
-    // Setup keyboard shortcuts
-    this.setupKeyboardShortcuts();
-  }
-
-  setupToolbar() {
-    this.currentTool = 'arrow';
-    
-    // Tool buttons
-    const toolButtons = document.querySelectorAll('.toolbar-tool');
-    toolButtons.forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const toolType = e.currentTarget.dataset.tool;
-        this.activateTool(toolType);
-      });
-    });
-  }
-
-  activateTool(toolType) {
-    // Update current tool
-    this.currentTool = toolType;
-    
-    // Update UI
-    document.querySelectorAll('.toolbar-tool').forEach(btn => {
-      btn.classList.remove('active');
-    });
-    
-    const activeBtn = document.querySelector(`[data-tool="${toolType}"]`);
-    if (activeBtn) {
-      activeBtn.classList.add('active');
-    }
-    
-    // Hide all tool controls first
-    this.hideToolControls();
-    
-    // Get the tool controls panel
-    const toolControlsPanel = document.getElementById('toolControlsPanel');
-    
-    // Show relevant controls for the tool
-    switch (toolType) {
-      case 'arrow':
-        // Default selection tool - no additional controls needed
-        if (toolControlsPanel) {
-          toolControlsPanel.classList.add('d-none');
-        }
-        break;
-      case 'explode':
-        this.showToolControls('explodeControls');
-        if (toolControlsPanel) {
-          toolControlsPanel.classList.remove('d-none');
-        }
-        break;
-      case 'slice':
-        this.showToolControls('sliceControls');
-        if (toolControlsPanel) {
-          toolControlsPanel.classList.remove('d-none');
-        }
-        break;
-      case 'xray':
-        this.showToolControls('xrayControls');
-        if (toolControlsPanel) {
-          toolControlsPanel.classList.remove('d-none');
-        }
-        break;
-      case 'animation':
-        this.showToolControls('animationControls');
-        this.updateAnimationUI(); // Update the animation dropdown
-        if (toolControlsPanel) {
-          toolControlsPanel.classList.remove('d-none');
-        }
-        break;
-      case 'reset':
-        // Reset tool should trigger reset and stay on arrow tool
-        this.reset();
-        // After reset, switch back to arrow tool
-        this.activateTool('arrow');
-        return; // Exit early to avoid double activation
-      case '?':
-      case '/':
-        event.preventDefault();
-        this.showKeyboardShortcutsHelp();
-        break;
-      default:
-        console.warn('Unknown tool type:', toolType);
-    }
-  }
-
-  showToolControls(controlsId) {
-    const controls = document.getElementById(controlsId);
-    if (controls) {
-      controls.classList.remove('d-none');
-    }
-  }
-
-  hideToolControls() {
-    const allControls = [
-      'explodeControls',
-      'sliceControls', 
-      'xrayControls',
-      'animationControls'
-    ];
-    
-    allControls.forEach(id => {
-      const element = document.getElementById(id);
-      if (element) {
-        element.classList.add('d-none');
-      }
-    });
-  }
-
-  initializeTooltips() {
-    // Initialize Bootstrap tooltips
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-      return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
-  }
-
-  setupKeyboardShortcuts() {
-    document.addEventListener('keydown', (event) => {
-      // Don't trigger shortcuts if user is typing in an input field
-      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.isContentEditable) {
-        return;
-      }
-
-      // Handle tool shortcuts
-      const key = event.key.toLowerCase();
-      
-      switch (key) {
-        case 'v':
-          event.preventDefault();
-          this.activateTool('arrow');
-          break;
-        case 'e':
-          event.preventDefault();
-          this.activateTool('explode');
-          break;
-        case 's':
-          event.preventDefault();
-          this.activateTool('slice');
-          break;
-        case 'a':
-          event.preventDefault();
-          this.activateTool('animation');
-          break;
-        case 'x':
-          event.preventDefault();
-          this.activateTool('xray');
-          break;
-        case 'r':
-          event.preventDefault();
-          this.activateTool('reset');
-          break;
-        case '?':
-        case '/':
-          event.preventDefault();
-          this.showKeyboardShortcutsHelp();
-          break;
-        case '0':
-        case '1':
-        case '2':
-        case '3':
-        case '4':
-        case '5':
-        case '6':
-        case '7':
-        case '8':
-        case '9':
-          event.preventDefault();
-          this.handlePercentageShortcut(parseInt(key), event.shiftKey);
-          break;
-      }
-    });
-  }
-
-  handlePercentageShortcut(digit, shiftKey) {
-    let percentageValue;
-    
-    // Handle special case: Shift+0 = 100%
-    if (digit === 0 && shiftKey) {
-      percentageValue = 1.0; // 100%
-    } else {
-      // Regular mapping: 0=0%, 1=10%, 2=20%, ..., 9=90%
-      percentageValue = digit / 10;
-    }
-    
-    // Apply percentage based on current tool
-    switch (this.currentTool) {
-      case 'explode':
-        this.params.explode = percentageValue;
-        this.explode(percentageValue);
-        // Update UI
-        const explodeSlider = document.getElementById('explodeSlider');
-        const explodeValue = document.getElementById('explodeValue');
-        if (explodeSlider) explodeSlider.value = percentageValue;
-        if (explodeValue) explodeValue.textContent = Math.round(percentageValue * 100) + '%';
-        break;
-        
-      case 'slice':
-        this.params.slice = percentageValue;
-        this.updateSlice();
-        // Update UI
-        const sliceSlider = document.getElementById('sliceSlider');
-        const sliceValue = document.getElementById('sliceValue');
-        if (sliceSlider) sliceSlider.value = percentageValue;
-        if (sliceValue) sliceValue.textContent = Math.round(percentageValue * 100) + '%';
-        break;
-        
-      case 'xray':
-        this.setXrayMode(percentageValue);
-        // Update UI
-        const xraySlider = document.getElementById('xraySlider');
-        const xrayValue = document.getElementById('xrayValue');
-        if (xraySlider) xraySlider.value = percentageValue;
-        if (xrayValue) xrayValue.textContent = Math.round(percentageValue * 100) + '%';
-        break;
-    }
-  }
-
-  setupRaycasting() {
-    this.raycaster = new THREE.Raycaster();
-    this.mouse = new THREE.Vector2();
-    this.isMouseDown = false;
-    this.mouseDownTime = 0;
-    this.hasMouseMoved = false;
-    this.hoveredMesh = null;
-
-    this.renderer.domElement.addEventListener('mousedown', (event) => this.onMouseDown(event));
-    this.renderer.domElement.addEventListener('mouseup', (event) => this.onMouseUp(event));
-    this.renderer.domElement.addEventListener('mousemove', (event) => this.onMouseMove(event));
-    this.renderer.domElement.addEventListener('mouseleave', () => this.onMouseLeave());
-  }
-
-  onMouseDown(event) {
-    this.isMouseDown = true;
-    this.mouseDownTime = Date.now();
-    this.hasMouseMoved = false;
-  }
-
-  onMouseUp(event) {
-    if (this.isMouseDown) {
-      const timeSinceMouseDown = Date.now() - this.mouseDownTime;
-      // Only trigger click if mouse hasn't moved much and it was a quick click (not a drag)
-      if (!this.hasMouseMoved && timeSinceMouseDown < 200) {
-        this.handleClick(event);
-      }
-    }
-    this.isMouseDown = false;
-    this.hasMouseMoved = false;
-  }
-
-  onMouseMove(event) {
-    // Update mouse position for raycasting
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    // If mouse is down and has moved, mark as dragging
-    if (this.isMouseDown) {
-      this.hasMouseMoved = true;
-    }
-
-    // Handle hover effects
-    if (!this.isMouseDown && this.parts.length > 0) {
-      this.raycaster.setFromCamera(this.mouse, this.camera);
-      const intersects = this.raycaster.intersectObjects(this.parts, true);
-      
-      if (intersects.length > 0) {
-        const intersectedMesh = intersects[0].object;
-        this.setHover(intersectedMesh);
-      } else {
-        this.clearHover();
-      }
-    }
-  }
-
-  onMouseLeave() {
-    this.clearHover();
-  }
-
-  setHover(mesh) {
-    // Clear previous hover
-    this.clearHover();
-    
-    this.hoveredMesh = mesh;
-    
-    // Add hover effect - change cursor and potentially material
-    this.renderer.domElement.style.cursor = 'pointer';
-    
-    // Optional: Add visual hover effect (like outline or color change)
-    if (mesh.material) {
-      if (!mesh.userData.originalEmissive) {
-        mesh.userData.originalEmissive = mesh.material.emissive ? mesh.material.emissive.clone() : new THREE.Color(0x000000);
-      }
-      if (mesh.material.emissive) {
-        mesh.material.emissive.setHex(0x444444); // Slight glow on hover
-      }
-    }
-  }
-
-  clearHover() {
-    if (this.hoveredMesh) {
-      // Restore original cursor
-      this.renderer.domElement.style.cursor = 'default';
-      
-      // Restore original material properties
-      if (this.hoveredMesh.material && this.hoveredMesh.userData.originalEmissive) {
-        if (this.hoveredMesh.material.emissive) {
-          this.hoveredMesh.material.emissive.copy(this.hoveredMesh.userData.originalEmissive);
-        }
-      }
-      
-      this.hoveredMesh = null;
-    }
-  }
-
-  handleClick(event) {
-    if (this.parts.length === 0) return;
-
-    this.raycaster.setFromCamera(this.mouse, this.camera);
-    const intersects = this.raycaster.intersectObjects(this.parts, true);
-
-    if (intersects.length > 0) {
-      const selectedMesh = intersects[0].object;
-      console.log('Selected mesh:', selectedMesh.name || 'Unnamed');
-      
-      // Focus on the selected part
-      this.focusOnPart(selectedMesh);
-    }
-  }
-
+  // Model loading methods
   loadModel(url, name) {
-    console.log('Loading GLB model from:', url);
-    
-    const loader = new GLTFLoader();
-    loader.load(
-      url,
-      (gltf) => {
-        console.log('Model loaded successfully:', gltf);
-        this.clearModel();
-        
-        this.model = gltf.scene;
-        this.model.name = name || 'LoadedModel';
-        
-        this.scene.add(this.model);
-        
-        // Collect all mesh parts for interaction
-        this.parts = [];
-        this.model.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-            // Store original local position relative to model (not world position)
-            child.userData.origin = child.position.clone();
-            this.parts.push(child);
-          }
-        });
-        
-        console.log('Found', this.parts.length, 'mesh parts');
-        
-        // Setup animations if available
-        if (gltf.animations && gltf.animations.length > 0) {
-          this.setupAnimations(gltf.animations);
-        }
-        
-        this.calculateExplosionDirections();
-        this.fitModelToPane();
-        this.updateSlice();
-        this.hideEmptyState();
-        console.log('Model loading completed and fitted to pane');
-      },
-      (progress) => {
-        console.log('Loading progress:', (progress.loaded / progress.total * 100) + '%');
-      },
-      (error) => {
-        console.error('Error loading model:', error);
-      }
-    );
+    this.modelLoader.loadModel(url, name);
   }
 
   loadGLTFModel(url, name, customManager = null) {
-    console.log('Loading GLTF model from:', url, 'with custom manager:', !!customManager);
-    
-    const loader = new GLTFLoader(customManager);
-    loader.load(
-      url,
-      (gltf) => {
-        console.log('GLTF model loaded successfully:', gltf);
-        this.clearModel();
-        
-        this.model = gltf.scene;
-        this.model.name = name || 'LoadedGLTFModel';
-        
-        this.scene.add(this.model);
-        
-        // Collect all mesh parts for interaction
-        this.parts = [];
-        this.model.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-            // Store original local position relative to model (not world position)
-            child.userData.origin = child.position.clone();
-            this.parts.push(child);
-          }
-        });
-        
-        console.log('Found', this.parts.length, 'mesh parts in GLTF');
-        
-        // Setup animations if available
-        if (gltf.animations && gltf.animations.length > 0) {
-          this.setupAnimations(gltf.animations);
-        }
-        
-        this.calculateExplosionDirections();
-        this.fitModelToPane();
-        this.updateSlice();
-        this.hideEmptyState();
-        console.log('GLTF model loading completed and fitted to pane');
-      },
-      (progress) => {
-        console.log('GLTF loading progress:', (progress.loaded / progress.total * 100) + '%');
-      },
-      (error) => {
-        console.error('Error loading GLTF model:', error);
-      }
-    );
+    this.modelLoader.loadGLTFModel(url, name, customManager);
   }
 
   fitModelToPane() {
-    if (!this.model) return;
-
-    // Calculate the bounding box of the model
-    const box = new THREE.Box3().setFromObject(this.model);
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-
-    // Get the current aspect ratio of the renderer
-    const containerRect = this.container.getBoundingClientRect();
-    const aspect = containerRect.width / containerRect.height;
-    this.camera.aspect = aspect;
-    this.camera.updateProjectionMatrix();
-
-    // Calculate distance needed to fit object
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const fov = this.camera.fov * (Math.PI / 180);
-    let distance = maxDim / (2 * Math.tan(fov / 2));
-    
-    // Add some padding (20% extra distance)
-    distance *= 1.4;
-    
-    // Ensure minimum distance to prevent being too close
-    distance = Math.max(distance, maxDim * 2);
-
-    // Position camera
-    const direction = new THREE.Vector3(1, 1, 1).normalize();
-    this.camera.position.copy(center).add(direction.multiplyScalar(distance));
-    
-    // Point camera at the center of the model
-    this.camera.lookAt(center);
-    
-    // Update controls to focus on the model center
-    this.controls.target.copy(center);
-    this.controls.update();
-
-    console.log('Model fitted to pane:', {
-      center: center,
-      size: size,
-      maxDimension: maxDim,
-      cameraDistance: distance,
-      cameraPosition: this.camera.position
-    });
+    // Delegate to camera system
+    this.cameraSystem.fitModelToPane(this.model);
   }
 
   clearModel() {
-    if (this.model) {
-      this.scene.remove(this.model);
-      // Dispose of geometry and materials to free memory
-      this.model.traverse((child) => {
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) {
-          if (Array.isArray(child.material)) {
-            child.material.forEach(material => material.dispose());
-          } else {
-            child.material.dispose();
-          }
-        }
-      });
-    }
-    
-    this.model = null;
-    this.parts = [];
-    this.currentlyFocusedPart = null;
-    this.previousCameraState = { position: null, target: null };
-    
-    // Clear animations
-    if (this.mixer) {
-      this.mixer.stopAllAction();
-      this.mixer = null;
-    }
-    this.animations = [];
-    this.currentAction = null;
-    
-    // Clear x-ray mode
-    this.originalMaterialOpacity.clear();
-    this.isXrayMode = false;
-    
-    // Hide back button
-    const backButton = document.getElementById('backButtonOverlay');
-    if (backButton) {
-      backButton.classList.remove('visible');
-    }
-    
-    this.showEmptyState();
-    console.log('Model cleared');
+    this.modelLoader.clearModel();
   }
 
   showEmptyState() {
-    document.getElementById('viewer3DEmpty').style.display = 'block';
+    this.modelLoader.showEmptyState();
   }
 
   hideEmptyState() {
-    document.getElementById('viewer3DEmpty').style.display = 'none';
+    this.modelLoader.hideEmptyState();
   }
 
+  // Effects delegation methods
   updateSliceDirection() {
-    // Update the clipping plane normal vector based on selected direction
-    switch (this.sliceDirection) {
-      case 'x':
-        this.clipPlane.normal.set(-1, 0, 0); // Slice along X axis (left to right)
-        break;
-      case 'y':
-        this.clipPlane.normal.set(0, -1, 0); // Slice along Y axis (bottom to top)
-        break;
-      case 'z':
-        this.clipPlane.normal.set(0, 0, -1); // Slice along Z axis (front to back)
-        break;
-      default:
-        this.clipPlane.normal.set(0, -1, 0); // Default to Y axis
-    }
-    
-    console.log(`Slice direction changed to: ${this.sliceDirection.toUpperCase()}-axis`);
+    this.effectsSystem.setSliceDirection(this.sliceDirection);
   }
 
   updateSlice() {
-    if (!this.model) {
-      this.clipPlane.constant = 1000; // Show everything when no model
-      return;
-    }
-
-    // Calculate model bounds to determine clipping range
-    const box = new THREE.Box3().setFromObject(this.model);
-    const modelSize = box.getSize(new THREE.Vector3());
-
-    // Get min/max values based on current slice direction
-    let minValue, maxValue;
-    switch (this.sliceDirection) {
-      case 'x':
-        minValue = box.min.x;
-        maxValue = box.max.x;
-        break;
-      case 'y':
-        minValue = box.min.y;
-        maxValue = box.max.y;
-        break;
-      case 'z':
-        minValue = box.min.z;
-        maxValue = box.max.z;
-        break;
-      default:
-        minValue = box.min.y;
-        maxValue = box.max.y;
-    }
-
-    // Map slider value 0-1 to clipping range
-    // slice = 0: clip everything (constant = minValue - buffer) 
-    // slice = 1: show everything (constant = maxValue + buffer)
-    const buffer = Math.max(modelSize.x, modelSize.y, modelSize.z) * 0.1; // Buffer based on largest dimension
-    const clippingRange = (maxValue + buffer) - (minValue - buffer);
-    this.clipPlane.constant = (minValue - buffer) + (this.params.slice * clippingRange);
-
-    console.log(`Slice ${this.sliceDirection}-axis: ${this.params.slice.toFixed(2)} (position: ${this.clipPlane.constant.toFixed(2)})`);
+    this.effectsSystem.setSliceAmount(this.params.slice);
   }
 
   calculateExplosionDirections() {
-    if (!this.model || this.parts.length === 0) return;
-
-    // Calculate model bounds and center
-    const box = new THREE.Box3().setFromObject(this.model);
-    const center = new THREE.Vector3();
-    box.getCenter(center);
-    
-    // For z-axis explosion, parts move forward or backward based on their z-position relative to center
-    this.parts.forEach((part, index) => {
-      if (!part.userData.origin) return;
-      
-      // Get current world position of the part for direction calculation
-      const worldPosition = new THREE.Vector3();
-      part.getWorldPosition(worldPosition);
-      
-      // Determine direction along z-axis based on part's world z-position relative to center
-      const partZ = worldPosition.z;
-      const centerZ = center.z;
-      
-      let direction;
-      if (partZ >= centerZ) {
-        // Parts at or in front of center move forward (+z)
-        direction = new THREE.Vector3(0, 0, 1);
-      } else {
-        // Parts behind center move backward (-z)  
-        direction = new THREE.Vector3(0, 0, -1);
-      }
-      
-      // Store the consistent direction in userData
-      part.userData.explosionDirection = direction.clone();
-    });
-
-    console.log('Calculated z-axis explosion directions for', this.parts.length, 'parts');
+    this.effectsSystem.calculateExplosionDirections();
   }
 
   explode(factor) {
-    if (!this.model) return;
-    
-    // Reset all parts to their original positions first
-    this.parts.forEach((part) => {
-      part.position.copy(part.userData.origin);
-    });
-    
-    if (factor === 0) return; // No explosion needed
-    
-    // Calculate model bounds for scale reference
-    const box = new THREE.Box3().setFromObject(this.model);
-    const modelSize = box.getSize(new THREE.Vector3());
-    const maxDimension = Math.max(modelSize.x, modelSize.y, modelSize.z);
-    
-    // Base explosion distance scaled by model size
-    const baseDistance = maxDimension * factor * 0.09;
-    
-    // Apply explosion using stored directions
-    this.parts.forEach((part) => {
-      if (!part.userData.explosionDirection) return;
-      
-      // Calculate explosion distance - parts further from center move more
-      const center = new THREE.Vector3();
-      box.getCenter(center);
-      const partDistFromCenter = part.userData.origin.distanceTo(center);
-      const distanceMultiplier = 1 + (partDistFromCenter / maxDimension) * 0.5;
-      const explosionDistance = baseDistance * distanceMultiplier;
-      
-      // Apply explosion offset using consistent direction
-      const explosionOffset = part.userData.explosionDirection.clone().multiplyScalar(explosionDistance);
-      part.position.copy(part.userData.origin).add(explosionOffset);
-    });
+    this.effectsSystem.setExplodeAmount(factor);
   }
 
+  setXrayMode(transparency) {
+    this.params.xray = transparency;
+    this.effectsSystem.setXrayMode(transparency);
+    this.isXrayMode = transparency < 1.0;
+    this.stateManager.updateUIState({ xray: transparency });
+  }
+
+  // Interaction methods - now delegate to camera system
   focusOnPart(selectedMesh) {
-    console.log('Focusing on part:', selectedMesh.name);
-    
-    // Store the previous camera state for back navigation
-    this.previousCameraState = {
-      position: this.camera.position.clone(),
-      target: this.controls.target.clone()
-    };
-    
-    // Hide all other parts
-    this.parts.forEach(part => {
-      if (part !== selectedMesh) {
-        part.visible = false;
-      }
-    });
-    
-    // Show only the selected part
-    selectedMesh.visible = true;
-    this.currentlyFocusedPart = selectedMesh;
-    
-    // Calculate bounding box of the selected part
-    const box = new THREE.Box3().setFromObject(selectedMesh);
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    
-    // Calculate optimal camera position
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const fov = this.camera.fov * (Math.PI / 180);
-    let distance = maxDim / (2 * Math.tan(fov / 2));
-    distance *= 2; // Add some padding
-    distance = Math.max(distance, maxDim * 2); // Ensure minimum distance
-    
-    // Choose a good viewing angle (45 degrees from each axis)
-    const direction = new THREE.Vector3(1, 1, 1).normalize();
-    const newPosition = center.clone().add(direction.multiplyScalar(distance));
-    
-    // Animate camera to new position
-    gsap.to(this.camera.position, {
-      duration: 1,
-      x: newPosition.x,
-      y: newPosition.y,
-      z: newPosition.z,
-      ease: "power2.inOut"
-    });
-    
-    gsap.to(this.controls.target, {
-      duration: 1,
-      x: center.x,
-      y: center.y,
-      z: center.z,
-      ease: "power2.inOut",
-      onUpdate: () => {
-        this.controls.update();
-      }
-    });
-    
-    // Show back button
-    const backButton = document.getElementById('backButtonOverlay');
-    if (backButton) {
-      backButton.classList.add('visible');
-    }
-    
-    console.log('Focused on part:', selectedMesh.name || 'Unnamed', 'at center:', center);
+    this.interactionSystem.focusOnPart(selectedMesh);
   }
 
   goBackToFullView(animate = true) {
-    if (!this.model) return;
-    
-    console.log('Going back to full view');
-    
-    // Show all parts
-    this.parts.forEach(part => {
-      part.visible = true;
-    });
-    
-    this.currentlyFocusedPart = null;
-    
-    if (animate && this.previousCameraState.position && this.previousCameraState.target) {
-      // Animate back to previous camera state
-      gsap.to(this.camera.position, {
-        duration: 1,
-        x: this.previousCameraState.position.x,
-        y: this.previousCameraState.position.y,
-        z: this.previousCameraState.position.z,
-        ease: "power2.inOut"
-      });
-      
-      gsap.to(this.controls.target, {
-        duration: 1,
-        x: this.previousCameraState.target.x,
-        y: this.previousCameraState.target.y,
-        z: this.previousCameraState.target.z,
-        ease: "power2.inOut",
-        onUpdate: () => {
-          this.controls.update();
-        }
-      });
-    } else {
-      // Instantly fit model to pane
-      this.fitModelToPane();
-    }
-    
-    // Hide back button
-    const backButton = document.getElementById('backButtonOverlay');
-    if (backButton) {
-      backButton.classList.remove('visible');
-    }
-    
-    // Clear previous camera state
-    this.previousCameraState = { position: null, target: null };
+    this.interactionSystem.goBackToFullView(animate);
   }
 
-  reset() {
+  // Reset methods
+  resetInternal() {
+    // Internal reset logic without UI updates (UI Manager handles those)
     this.params.explode = 0;
     this.params.slice = 1;
-    this.explode(0);
-    this.updateSlice();
+    this.params.xray = 1;
     
-    // Reset UI controls
-    const explodeSlider = document.getElementById('explodeSlider');
-    const sliceSlider = document.getElementById('sliceSlider');
-    const explodeValue = document.getElementById('explodeValue');
-    const sliceValue = document.getElementById('sliceValue');
-    const xraySlider = document.getElementById('xraySlider');
-    const xrayValue = document.getElementById('xrayValue');
+    // Use effects system for reset
+    this.effectsSystem.resetEffects();
     
-    if (explodeSlider) {
-      explodeSlider.value = 0;
-      if (explodeValue) explodeValue.textContent = '0%';
-    }
-    
-    if (sliceSlider) {
-      sliceSlider.value = 1;
-      if (sliceValue) sliceValue.textContent = '100%';
-    }
-    
-    // Reset x-ray mode to fully opaque (100% transparency in user terms)
-    if (xraySlider) {
-      xraySlider.value = 1;
-      if (xrayValue) xrayValue.textContent = '100%';
-    }
-    this.setXrayMode(1); // 1 = fully opaque
+    // Use state manager for reset
+    this.stateManager.resetToDefaults();
     
     // Reset camera to fit model
-    if (this.currentlyFocusedPart) {
+    if (this.interactionSystem.isPartFocused()) {
       this.goBackToFullView();
     } else {
       this.fitModelToPane();
@@ -1010,35 +361,59 @@ export class Viewer3D {
     console.log('Reset to default state');
   }
 
-  onResize() {
-    if (!this.container) return;
-    
-    const containerRect = this.container.getBoundingClientRect();
-    const width = containerRect.width;
-    const height = containerRect.height;
-    
-    this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height);
-    
-    console.log('3D Viewer resized to:', width, 'x', height);
+  reset() {
+    // Public reset method that includes UI updates
+    this.resetInternal();
+    this.uiManager.resetControls();
   }
 
-  animate() {
-    requestAnimationFrame(() => this.animate());
-    
-    // Update controls
-    this.controls.update();
-    
-    // Update animations
-    if (this.mixer) {
-      this.mixer.update(this.clock.getDelta());
-    }
-    
-    // Render the scene
-    this.renderer.render(this.scene, this.camera);
+  // Animation delegation methods - maintain backward compatibility
+  setupAnimations(animations) {
+    this.animationSystem.setupAnimations(animations);
   }
 
+  selectAnimation(animationName) {
+    this.animationSystem.selectAnimation(animationName);
+  }
+
+  playAnimation() {
+    this.animationSystem.playAnimation();
+  }
+
+  pauseAnimation() {
+    this.animationSystem.pauseAnimation();
+  }
+
+  stopAnimation() {
+    this.animationSystem.stopAnimation();
+  }
+
+  setAnimationSpeed(speed) {
+    this.animationSystem.setAnimationSpeed(speed);
+  }
+
+  updateAnimationUI() {
+    this.animationSystem.updateAnimationUI();
+  }
+
+  updateAnimationButtons() {
+    this.animationSystem.updateAnimationButtons();
+  }
+
+  // Legacy compatibility getters for animation properties
+  get mixer() {
+    return this.animationSystem.mixer;
+  }
+
+  get animations() {
+    return this.animationSystem.animations;
+  }
+
+  get currentAction() {
+    return this.animationSystem.currentAction;
+  }
+
+  // Test cube methods (keeping for backward compatibility)
   addTestCube() {
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     const material = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
@@ -1059,278 +434,94 @@ export class Viewer3D {
     }
   }
 
-  setupAnimations(animations) {
-    this.animations = animations;
-    this.mixer = new THREE.AnimationMixer(this.model);
-    
-    console.log('Setup animations:', animations.length, 'found');
-    animations.forEach((clip, index) => {
-      console.log(`Animation ${index}:`, clip.name, clip.duration + 's');
-    });
-    
-    this.updateAnimationUI();
-  }
-
-  selectAnimation(animationName) {
-    if (!this.mixer || !this.animations.length) return;
-    
-    // Stop current animation
-    if (this.currentAction) {
-      this.currentAction.stop();
-    }
-    
-    // Find and setup new animation
-    const clip = this.animations.find(anim => anim.name === animationName);
-    if (clip) {
-      this.currentAction = this.mixer.clipAction(clip);
-      console.log('Selected animation:', animationName);
-      this.updateAnimationButtons();
-    }
-  }
-
-  playAnimation() {
-    if (this.currentAction) {
-      this.currentAction.play();
-      console.log('Playing animation');
-      this.updateAnimationButtons();
-    }
-  }
-
-  pauseAnimation() {
-    if (this.currentAction) {
-      this.currentAction.paused = !this.currentAction.paused;
-      console.log('Animation paused:', this.currentAction.paused);
-      this.updateAnimationButtons();
-    }
-  }
-
-  stopAnimation() {
-    if (this.currentAction) {
-      this.currentAction.stop();
-      console.log('Animation stopped');
-      this.updateAnimationButtons();
-    }
-  }
-
-  setAnimationSpeed(speed) {
-    if (this.currentAction) {
-      this.currentAction.setEffectiveTimeScale(speed);
-      console.log('Animation speed set to:', speed);
-    }
-  }
-
-  updateAnimationUI() {
-    const animationSelect = document.getElementById('animationSelect');
-    if (!animationSelect) return;
-    
-    animationSelect.innerHTML = '<option value="">Select Animation</option>';
-    
-    this.animations.forEach(anim => {
-      const option = document.createElement('option');
-      option.value = anim.name;
-      option.textContent = anim.name;
-      animationSelect.appendChild(option);
-    });
-    
-    this.updateAnimationButtons();
-  }
-
-  updateAnimationButtons() {
-    const playBtn = document.getElementById('animationPlay');
-    const pauseBtn = document.getElementById('animationPause');
-    const stopBtn = document.getElementById('animationStop');
-    
-    const hasAnimation = !!this.currentAction;
-    const isPlaying = hasAnimation && this.currentAction.isRunning() && !this.currentAction.paused;
-    const isPaused = hasAnimation && this.currentAction.paused;
-    
-    if (playBtn) playBtn.disabled = !hasAnimation || isPlaying;
-    if (pauseBtn) pauseBtn.disabled = !hasAnimation || (!isPlaying && !isPaused);
-    if (stopBtn) stopBtn.disabled = !hasAnimation || (!isPlaying && !isPaused);
-  }
-
-  setXrayMode(transparency) {
-    if (!this.model) return;
-    
-    // Update the params to track current xray value
-    this.params.xray = transparency;
-    
-    this.parts.forEach(part => {
-      if (part.material) {
-        // Store original opacity if not already stored
-        if (!this.originalMaterialOpacity.has(part)) {
-          this.originalMaterialOpacity.set(part, part.material.opacity || 1.0);
-        }
-        
-        if (transparency < 1.0) {
-          // Enable x-ray mode - transparency is now the actual opacity value
-          part.material.transparent = true;
-          part.material.opacity = transparency;
-          this.isXrayMode = true;
-        } else {
-          // Disable x-ray mode - restore original opacity when at 100%
-          const originalOpacity = this.originalMaterialOpacity.get(part);
-          part.material.opacity = originalOpacity;
-          part.material.transparent = originalOpacity < 1.0;
-          this.isXrayMode = false;
-        }
-        
-        part.material.needsUpdate = true;
-      }
-    });
-    
-    console.log('X-ray mode:', transparency < 1.0 ? `opacity: ${transparency.toFixed(2)}` : 'disabled');
-  }
-
-  showKeyboardShortcutsHelp() {
-    // Create modal if it doesn't exist
-    let modal = document.getElementById('keyboardShortcutsModal');
-    if (!modal) {
-      modal = document.createElement('div');
-      modal.id = 'keyboardShortcutsModal';
-      modal.className = 'modal fade';
-      modal.innerHTML = `
-        <div class="modal-dialog modal-dialog-centered">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">
-                <i class="bi bi-keyboard me-2"></i>
-                Keyboard Shortcuts
-              </h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-              <div class="row">
-                <div class="col-6">
-                  <h6 class="text-muted mb-3">Tools</h6>
-                  <div class="d-flex align-items-center mb-2">
-                    <kbd class="me-2">V</kbd>
-                    <span>Select & Navigate</span>
-                  </div>
-                  <div class="d-flex align-items-center mb-2">
-                    <kbd class="me-2">E</kbd>
-                    <span>Explode View</span>
-                  </div>
-                  <div class="d-flex align-items-center mb-2">
-                    <kbd class="me-2">S</kbd>
-                    <span>Slice View</span>
-                  </div>
-                  <div class="d-flex align-items-center mb-2">
-                    <kbd class="me-2">A</kbd>
-                    <span>Animations</span>
-                  </div>
-                  <div class="d-flex align-items-center mb-2">
-                    <kbd class="me-2">X</kbd>
-                    <span>X-ray Mode</span>
-                  </div>
-                  <div class="d-flex align-items-center mb-2">
-                    <kbd class="me-2">R</kbd>
-                    <span>Reset View</span>
-                  </div>
-                </div>
-                <div class="col-6">
-                  <h6 class="text-muted mb-3">Percentage Control</h6>
-                  <div class="d-flex align-items-center mb-2">
-                    <kbd class="me-2">0</kbd>
-                    <span>0%</span>
-                  </div>
-                  <div class="d-flex align-items-center mb-2">
-                    <kbd class="me-2">1</kbd>
-                    <span>10%</span>
-                  </div>
-                  <div class="d-flex align-items-center mb-2">
-                    <kbd class="me-2">2</kbd>
-                    <span>20%</span>
-                  </div>
-                  <div class="d-flex align-items-center mb-2">
-                    <span class="me-2">...</span>
-                    <span class="text-muted">and so on</span>
-                  </div>
-                  <div class="d-flex align-items-center mb-2">
-                    <kbd class="me-2">9</kbd>
-                    <span>90%</span>
-                  </div>
-                  <div class="d-flex align-items-center mb-2">
-                    <kbd class="me-2">⇧</kbd><kbd class="me-2">0</kbd>
-                    <span>100%</span>
-                  </div>
-                  <hr class="my-3">
-                  <div class="d-flex align-items-center mb-2">
-                    <kbd class="me-2">?</kbd>
-                    <span>Show this help</span>
-                  </div>
-                </div>
-              </div>
-              <div class="alert alert-info mt-3 mb-0">
-                <small>
-                  <i class="bi bi-info-circle me-1"></i>
-                  Percentage controls (0-9, ⇧0) apply to the currently active tool: Explode, Slice, or X-ray.
-                </small>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-      document.body.appendChild(modal);
-    }
-    
-    // Show the modal
-    const bsModal = new bootstrap.Modal(modal);
-    bsModal.show();
-  }
-
   // Recording system support methods
   setExplodeAmount(amount) {
     this.params.explode = amount;
-    this.explode(amount);
-    // Update UI to reflect the change
-    const explodeSlider = document.getElementById('explodeSlider');
-    const explodeValue = document.getElementById('explodeValue');
-    if (explodeSlider) explodeSlider.value = amount;
-    if (explodeValue) explodeValue.textContent = Math.round(amount * 100) + '%';
+    this.effectsSystem.setExplodeAmount(amount);
+    this.uiManager.updateControlValues({ explode: amount });
   }
 
   setSliceAmount(amount) {
     this.params.slice = amount;
-    this.updateSlice();
-    // Update UI to reflect the change
-    const sliceSlider = document.getElementById('sliceSlider');
-    const sliceValue = document.getElementById('sliceValue');
-    if (sliceSlider) sliceSlider.value = amount;
-    if (sliceValue) sliceValue.textContent = Math.round(amount * 100) + '%';
+    this.effectsSystem.setSliceAmount(amount);
+    this.uiManager.updateControlValues({ slice: amount });
   }
 
   setXRayAmount(amount) {
     this.setXrayMode(amount);
-    // Update UI to reflect the change
-    const xraySlider = document.getElementById('xraySlider');
-    const xrayValue = document.getElementById('xrayValue');
-    if (xraySlider) xraySlider.value = amount;
-    if (xrayValue) xrayValue.textContent = Math.round(amount * 100) + '%';
+    this.uiManager.updateControlValues({ xray: amount });
   }
 
   focusOnPartByName(objectName) {
-    // Find the mesh by name and focus on it
-    const targetMesh = this.parts.find(part => part.name === objectName);
-    if (targetMesh) {
-      this.focusOnPart(targetMesh);
-      return true;
-    } else {
-      console.warn('Could not find part with name:', objectName);
-      return false;
-    }
+    return this.interactionSystem.focusOnPartByName(objectName);
   }
 
   // Getter methods for current state (useful for recording)
   get explodeAmount() {
-    return this.params.explode;
+    return this.effectsSystem.currentExplodeAmount;
   }
 
   get sliceAmount() {
-    return this.params.slice;
+    return this.effectsSystem.currentSliceAmount;
   }
 
   get xrayAmount() {
-    return this.params.xray;
+    return this.effectsSystem.currentXrayAmount;
+  }
+
+  // Legacy compatibility methods - these maintain the old interface but delegate to UI Manager
+  get currentTool() {
+    return this.uiManager.getCurrentTool();
+  }
+
+  activateTool(toolType) {
+    this.uiManager.activateTool(toolType);
+  }
+
+  handlePercentageShortcut(digit, shiftKey) {
+    // This is now handled by the UI Manager
+    console.warn('handlePercentageShortcut is deprecated - handled automatically by UIManager');
+  }
+
+  showKeyboardShortcutsHelp() {
+    this.uiManager.getKeyboardManager().showKeyboardShortcutsHelp();
+  }
+
+  /**
+   * Handle container resize events
+   */
+  onResize() {
+    // Delegate to rendering system for camera and renderer updates
+    if (this.renderingSystem) {
+      this.renderingSystem.onResize();
+    }
+    
+    // Refit model to the new pane size if we have a model loaded
+    if (this.model && !this.currentlyFocusedPart) {
+      // Clear any existing resize timeout
+      if (this.resizeFitTimeout) {
+        clearTimeout(this.resizeFitTimeout);
+      }
+      
+      // Delay to ensure CSS transitions and DOM updates are complete
+      this.resizeFitTimeout = setTimeout(() => {
+        console.log('Refitting model after resize...');
+        this.fitModelToPane();
+      }, 100);
+    }
+    
+    console.log('Viewer3D resize handled');
+  }
+
+  /**
+   * Manually center and fit the model (useful for debugging)
+   */
+  centerModel() {
+    if (this.model) {
+      console.log('Manually centering model...');
+      this.fitModelToPane();
+    } else {
+      console.log('No model loaded to center');
+    }
   }
 } 

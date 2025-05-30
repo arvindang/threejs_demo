@@ -390,37 +390,28 @@ export class RecordingManager {
   }
 
   getCurrentAnimationName() {
-    if (!this.viewer3D?.currentAction) return null;
-    
-    // Find the animation name from the current action
-    const animations = this.viewer3D.animations || [];
-    for (const anim of animations) {
-      const action = this.viewer3D.mixer?.clipAction(anim);
-      if (action === this.viewer3D.currentAction) {
-        return anim.name;
-      }
-    }
-    return null;
+    if (!this.viewer3D?.animationSystem) return null;
+    return this.viewer3D.animationSystem.getCurrentAnimationName();
   }
 
   getAnimationPlayingState() {
-    if (!this.viewer3D?.currentAction) return false;
-    return this.viewer3D.currentAction.isRunning() && !this.viewer3D.currentAction.paused;
+    if (!this.viewer3D?.animationSystem) return false;
+    return this.viewer3D.animationSystem.getAnimationPlayingState();
   }
 
   getAnimationPausedState() {
-    if (!this.viewer3D?.currentAction) return false;
-    return this.viewer3D.currentAction.paused;
+    if (!this.viewer3D?.animationSystem) return false;
+    return this.viewer3D.animationSystem.getAnimationPausedState();
   }
 
   getAnimationSpeed() {
-    if (!this.viewer3D?.currentAction) return 1.0;
-    return this.viewer3D.currentAction.getEffectiveTimeScale();
+    if (!this.viewer3D?.animationSystem) return 1.0;
+    return this.viewer3D.animationSystem.getAnimationSpeed();
   }
 
   getAnimationTime() {
-    if (!this.viewer3D?.currentAction) return 0;
-    return this.viewer3D.currentAction.time;
+    if (!this.viewer3D?.animationSystem) return 0;
+    return this.viewer3D.animationSystem.getAnimationTime();
   }
 
   getObjectVisibilityState() {
@@ -863,14 +854,14 @@ export class RecordingManager {
           break;
           
         case '3d_animation_play':
-          if (this.viewer3D?.currentAction) {
+          if (this.viewer3D?.animationSystem) {
             // Temporarily disable recording to avoid recursive calls
             const wasRecording = this.recordingState === 'recording';
             if (wasRecording) {
               this.recordingState = 'playback';
             }
             
-            this.viewer3D.playAnimation?.();
+            this.viewer3D.animationSystem.playAnimation?.();
             
             if (wasRecording) {
               this.recordingState = 'recording';
@@ -879,14 +870,14 @@ export class RecordingManager {
           break;
           
         case '3d_animation_pause':
-          if (this.viewer3D?.currentAction) {
+          if (this.viewer3D?.animationSystem) {
             // Temporarily disable recording to avoid recursive calls
             const wasRecording = this.recordingState === 'recording';
             if (wasRecording) {
               this.recordingState = 'playback';
             }
             
-            this.viewer3D.pauseAnimation?.();
+            this.viewer3D.animationSystem.pauseAnimation?.();
             
             if (wasRecording) {
               this.recordingState = 'recording';
@@ -895,14 +886,14 @@ export class RecordingManager {
           break;
           
         case '3d_animation_stop':
-          if (this.viewer3D?.currentAction) {
+          if (this.viewer3D?.animationSystem) {
             // Temporarily disable recording to avoid recursive calls
             const wasRecording = this.recordingState === 'recording';
             if (wasRecording) {
               this.recordingState = 'playback';
             }
             
-            this.viewer3D.stopAnimation?.();
+            this.viewer3D.animationSystem.stopAnimation?.();
             
             if (wasRecording) {
               this.recordingState = 'recording';
@@ -911,14 +902,14 @@ export class RecordingManager {
           break;
           
         case '3d_animation_speed':
-          if (this.viewer3D?.currentAction && eventState.data.speed) {
+          if (this.viewer3D?.animationSystem && eventState.data.speed) {
             // Temporarily disable recording to avoid recursive calls
             const wasRecording = this.recordingState === 'recording';
             if (wasRecording) {
               this.recordingState = 'playback';
             }
             
-            this.viewer3D.setAnimationSpeed?.(eventState.data.speed);
+            this.viewer3D.animationSystem.setAnimationSpeed?.(eventState.data.speed);
             
             if (wasRecording) {
               this.recordingState = 'recording';
@@ -1232,31 +1223,30 @@ export class RecordingManager {
     }
     
     // Restore animation playback state
-    if (this.viewer3D.currentAction && animationState.selectedAnimation) {
+    if (this.viewer3D.animationSystem && animationState.selectedAnimation) {
       // Set animation time
       if (typeof animationState.time === 'number') {
-        this.viewer3D.currentAction.time = animationState.time;
+        this.viewer3D.animationSystem.setAnimationTime(animationState.time);
       }
       
       // Set animation speed
       if (typeof animationState.speed === 'number') {
-        this.viewer3D.currentAction.setEffectiveTimeScale(animationState.speed);
+        this.viewer3D.animationSystem.setAnimationSpeed(animationState.speed);
         this.updateUIControl('animationSpeed', animationState.speed);
       }
       
       // Set play/pause state
       if (animationState.isPlaying) {
-        this.viewer3D.currentAction.paused = false;
-        this.viewer3D.currentAction.play();
+        this.viewer3D.animationSystem.playAnimation?.();
       } else if (animationState.isPaused) {
-        this.viewer3D.currentAction.paused = true;
+        this.viewer3D.animationSystem.pauseAnimation?.();
       } else {
         // Stopped
-        this.viewer3D.currentAction.stop();
+        this.viewer3D.animationSystem.stopAnimation?.();
       }
       
       // Update animation UI
-      this.viewer3D.updateAnimationButtons?.();
+      this.viewer3D.animationSystem.updateAnimationButtons?.();
     }
   }
 
@@ -1270,14 +1260,14 @@ export class RecordingManager {
     }
     
     // Call the actual select method (but avoid triggering our override)
-    if (this.viewer3D.selectAnimation) {
+    if (this.viewer3D.animationSystem) {
       // Temporarily disable recording to avoid recursive calls
       const wasRecording = this.recordingState === 'recording';
       if (wasRecording) {
         this.recordingState = 'playback';
       }
       
-      this.viewer3D.selectAnimation(animationName);
+      this.viewer3D.animationSystem.selectAnimation(animationName);
       
       if (wasRecording) {
         this.recordingState = 'recording';

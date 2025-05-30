@@ -21,6 +21,10 @@ window.viewer3D = viewer3D;
 window.contentViewer = contentViewer;
 window.recordingManager = recordingManager;
 
+// Add debugging helpers
+window.centerModel = () => viewer3D.centerModel();
+window.resetCamera = () => viewer3D.fitModelToPane();
+
 // Remove direct model loading - let users upload their own models
 // This was bypassing the AssetManager system and not showing in the drawer
 console.log('Interactive 3D Learning Platform initialized - ready for file uploads');
