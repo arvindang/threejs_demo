@@ -288,6 +288,22 @@ export class Viewer3D {
     this.modelLoader.loadGLTFModel(url, name, customManager);
   }
 
+  loadFBXModel(url, name) {
+    this.modelLoader.loadFBXModel(url, name);
+  }
+
+  loadOBJModel(url, name) {
+    this.modelLoader.loadOBJModel(url, name);
+  }
+
+  loadPLYModel(url, name) {
+    this.modelLoader.loadPLYModel(url, name);
+  }
+
+  loadSTLModel(url, name) {
+    this.modelLoader.loadSTLModel(url, name);
+  }
+
   fitModelToPane() {
     // Delegate to camera system
     this.cameraSystem.fitModelToPane(this.model);

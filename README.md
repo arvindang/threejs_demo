@@ -5,7 +5,7 @@ The server is running at **http://localhost:3000**
 ## What You Can Do Now:
 
 ### 1. **Upload 3D Models** 
-- Drag GLB or GLTF files to the left drawer
+- Drag 3D model files to the left drawer: **GLB, GLTF, FBX, OBJ, PLY, STL**
 - Try the sample gearbox model that loads automatically
 - Click on parts to focus and isolate them
 - Use explode and slice controls
@@ -30,10 +30,11 @@ The server is running at **http://localhost:3000**
 
 ## Test Files You Can Use:
 
-### 3D Models (GLB/GLTF)
-- Download from [Sketchfab](https://sketchfab.com/3d-models?features=downloadable&sort_by=-likeCount)
-- Try [Khronos Sample Models](https://github.com/KhronosGroup/glTF-Sample-Models)
-- Use any GLB or GLTF file you have
+### 3D Models (GLB/GLTF/FBX/OBJ/PLY/STL)
+- **GLB/GLTF**: Download from [Sketchfab](https://sketchfab.com/3d-models?features=downloadable&sort_by=-likeCount) or [Khronos Sample Models](https://github.com/KhronosGroup/glTF-Sample-Models)
+- **FBX**: From Autodesk Maya, 3ds Max, or Blender exports
+- **OBJ**: Universal format from any 3D software
+- **PLY/STL**: Great for 3D scanned models and 3D printing files
 
 ### Content Files
 - **PDFs**: Any PDF document, technical manuals, textbooks

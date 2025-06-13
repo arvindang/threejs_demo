@@ -15,6 +15,7 @@ export class AssetManager {
     // Check if this is part of a GLTF file group
     const baseName = this.getBaseName(file.name);
     const extension = this.getFileExtension(file.name);
+    const modelType = this.getModelType(file.name);
     
     let modelData;
     
@@ -29,13 +30,14 @@ export class AssetManager {
         url: null, // Will be set when all files are ready
         type: file.type,
         size: file.size,
+        modelType: modelType,
         isGLTF: true
       };
       
       // Store the group for this basename
       this.fileGroups.set(baseName, modelData);
     } else {
-      // For GLB files, create blob URL directly
+      // For standalone files (GLB, FBX, OBJ, PLY, STL), create blob URL directly
       const url = URL.createObjectURL(file);
       modelData = {
         id: modelId,
@@ -44,6 +46,7 @@ export class AssetManager {
         url: url,
         type: file.type,
         size: file.size,
+        modelType: modelType,
         isGLTF: false
       };
     }
@@ -125,6 +128,26 @@ export class AssetManager {
     return filename.split('.').pop().toLowerCase();
   }
 
+  getModelType(filename) {
+    const extension = this.getFileExtension(filename);
+    switch (extension) {
+      case 'glb':
+        return 'glb';
+      case 'gltf':
+        return 'gltf';
+      case 'fbx':
+        return 'fbx';
+      case 'obj':
+        return 'obj';
+      case 'ply':
+        return 'ply';
+      case 'stl':
+        return 'stl';
+      default:
+        return 'unknown';
+    }
+  }
+
   addContent(file, id = null) {
     const contentId = id || `content_${Date.now()}`;
     const url = URL.createObjectURL(file);
@@ -157,8 +180,27 @@ export class AssetManager {
         }
         viewer3D.loadGLTFModel(model.url, model.name, model.customManager);
       } else {
-        // For GLB files, use standard loading
-        viewer3D.loadModel(model.url, model.name);
+        // For other file types, call the appropriate loader method
+        switch (model.modelType) {
+          case 'glb':
+            viewer3D.loadModel(model.url, model.name);
+            break;
+          case 'fbx':
+            viewer3D.loadFBXModel(model.url, model.name);
+            break;
+          case 'obj':
+            viewer3D.loadOBJModel(model.url, model.name);
+            break;
+          case 'ply':
+            viewer3D.loadPLYModel(model.url, model.name);
+            break;
+          case 'stl':
+            viewer3D.loadSTLModel(model.url, model.name);
+            break;
+          default:
+            console.warn('Unknown model type:', model.modelType, 'falling back to GLB loader');
+            viewer3D.loadModel(model.url, model.name);
+        }
       }
       
       this.updateModelsUI();

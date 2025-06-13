@@ -11,7 +11,7 @@ export class DragDropHandler {
     
     this.setupDropZone(modelsDropZone, modelsFileInput, (files) => {
       this.handleModelFiles(files);
-    }, ['.glb', '.gltf']);
+    }, ['.glb', '.gltf', '.fbx', '.obj', '.ply', '.stl']);
 
     // Content drop zone
     const contentDropZone = document.getElementById('contentDropZone');
@@ -69,7 +69,7 @@ export class DragDropHandler {
       
       if (extension === 'gltf') {
         gltfFiles.push(file);
-      } else if (extension === 'glb') {
+      } else if (['glb', 'fbx', 'obj', 'ply', 'stl'].includes(extension)) {
         standaloneFiles.push(file);
       } else if (['bin', 'jpg', 'jpeg', 'png', 'bmp', 'tiff'].includes(extension)) {
         relatedFiles.push(file);
